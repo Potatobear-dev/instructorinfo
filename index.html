@@ -258,6 +258,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
           <button data-act="exportCsv">CSV 내보내기 (엑셀용)</button>
           <hr>
           <button data-act="paste">시트 붙여넣기로 일괄 등록<small>구글시트·엑셀 범위 복사 → 붙여넣기</small></button>
+          <button data-act="profImport">프로필 일괄 반영<small>제안서 강사 프로필 → 이름 기준으로 경력·학력·자격만 보충</small></button>
         </div>
       </div>
     </div>
@@ -286,6 +287,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 <div class="modal" id="connModal"><div class="m-box" id="connBox" style="width:min(640px,100%)"></div></div>
 <div class="modal" id="unlockModal"><div class="m-box" id="unlockBox" style="width:min(440px,100%)"></div></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
+<input type="file" id="profIn" accept=".json,application/json" hidden>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -325,7 +327,7 @@ function fmtTime(iso){if(!iso)return '—';const d=new Date(iso);const p=n=>Stri
 function blank(){
   const n=nowISO();
   return {id:uid(),name:'',title:'강사',org:'',grade:'',status:'활성',
-    careers:[],edus:[],certs:[],
+    careers:[],edus:[],certs:[],activities:'',
     fields:[],topic:'',targets:[],
     tone:'',method:'',interaction:'',strengths:'',cautions:'',comment:'',
     fee:{unit:'',amount:'',minTime:'',special:''},
@@ -343,7 +345,7 @@ function dateKey(s){if(!s)return '';const m=String(s).match(/(\d{2,4})(?:\s*[.\-
 function latestDep(p){let best=null,bk='';(p.deployments||[]).forEach(d=>{const k=dateKey(d.date);if(!best||k>bk){best=d;bk=k;}});return best?{d:best,k:bk}:null;}
 function topDegree(p){const e=(p.edus||[]).filter(x=>x.school||x.degree);if(!e.length)return null;return e.slice().sort((a,b)=>(DEG_RANK[b.degree]||0)-(DEG_RANK[a.degree]||0))[0];}
 function eduText(e){return [e.school,e.major,e.degree].filter(Boolean).join(' ');}
-function careerText(c){return [c.org,c.role].filter(Boolean).join(' ')+(c.period?` (${c.period})`:'');}
+function careerText(c){const t=[c.org,c.role].filter(Boolean).join(' ');const pr=String(c.period||'').trim();if(!pr)return t;return pr.length<=2?`${pr}) ${t}`:`${t} (${pr})`;}
 function maskStr(s){if(!s)return '';let digits=0;const total=(s.match(/\d/g)||[]).length;return s.replace(/\d/g,d=>{digits++;return digits>total-4?d:'*';});}
 
 /* =====================================================================
@@ -598,7 +600,7 @@ function exportCsv(){
     ['톤','tone'],['진행방식','method'],['상호작용','interaction'],['강점','strengths'],['유의사항','cautions'],['종합코멘트','comment'],
     ['강사료 기준',p=>p.fee.unit],['금액(만원)',p=>p.fee.amount],['시간당(만원)',p=>{const h=hourly(p);return h==null?'':Math.round(h*10)/10;}],['최소시간',p=>p.fee.minTime],['특약',p=>p.fee.special],
     ['섭외경로',p=>p.sourcing.channel],['섭외창구',p=>p.sourcing.contact],['지급방식','payment'],
-    ['경력',p=>p.careers.map(careerText).join(' | ')],['학력',p=>p.edus.map(eduText).join(' | ')],['자격',p=>p.certs.map(c=>[c.name,c.issuer,c.year].filter(Boolean).join(' ')).join(' | ')],
+    ['경력',p=>p.careers.map(careerText).join(' | ')],['학력',p=>p.edus.map(eduText).join(' | ')],['자격',p=>p.certs.map(c=>[c.name,c.issuer,c.year].filter(Boolean).join(' ')).join(' | ')],['주요 활동·저서','activities'],
     ['투입이력',p=>p.deployments.map(d=>[d.client,d.course,d.target,d.date].filter(Boolean).join(' ')).join(' | ')],
     ['휴대폰',p=>p._locked?'(잠김)':p.access.phone],['차량번호',p=>p._locked?'(잠김)':p.access.car],['차종',p=>p._locked?'(잠김)':p.access.carModel]];
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
@@ -668,7 +670,7 @@ function renderFilters(){
 }
 function hay(p){return [p.name,p.title,p.org,p.topic,p.comment,p.strengths,p.cautions,p.tone,p.method,p.payment,p.sourcing.contact,p.fee.special,
   p.fields.join(' '),p.targets.join(' '),
-  p.careers.map(c=>c.org+' '+c.role).join(' '),p.certs.map(c=>c.name+' '+c.issuer).join(' '),p.edus.map(e=>e.school+' '+e.major+' '+e.degree).join(' '),
+  p.careers.map(c=>c.org+' '+c.role).join(' '),p.activities,p.certs.map(c=>c.name+' '+c.issuer).join(' '),p.edus.map(e=>e.school+' '+e.major+' '+e.degree).join(' '),
   p.deployments.map(d=>d.client+' '+d.course+' '+d.target+' '+d.reaction).join(' ')].join(' ').toLowerCase();}
 function filtered(){
   const q=F.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -760,6 +762,7 @@ function drawDetail(){
       <div class="plabel">주요 경력</div>${plist(p.careers,'careers',c=>`<li>${esc([c.org,c.role].filter(Boolean).join(' '))}${c.period?`<span>${esc(c.period)}</span>`:''}</li>`,3)}
       <div class="plabel">학력</div>${plist(p.edus,'edus',e=>`<li>${esc([e.school,e.major].filter(Boolean).join(' '))}${e.degree?`<span>${esc(e.degree)}</span>`:''}</li>`,0)}
       <div class="plabel">자격</div>${plist(p.certs,'certs',c=>`<li>${esc(c.name)}${(c.issuer||c.year)?`<span>${esc([c.issuer,c.year].filter(Boolean).join(' · '))}</span>`:''}</li>`,3)}
+      <div class="plabel">주요 활동·저서</div>${p.activities?`<div class="note" style="margin-top:0">${esc(p.activities)}</div>`:'<div class="na" style="font-size:13.5px">미입력</div>'}
     </div>
     <div class="sec"><div class="eb">Field <em>분야 · 대상</em></div>
       <dl class="kv"><dt>주요분야</dt><dd>${p.fields.length?`<div class="chips">${p.fields.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}</div>`:NA}</dd>
@@ -795,6 +798,7 @@ function profileText(p){
   p.careers.slice(0,3).forEach((c,i)=>L.push(`${i===0?'· 경력  ':'        '}${careerText(c)}`));
   if(p.certs.length)L.push(`· 자격  ${p.certs.slice(0,3).map(c=>c.name).join(', ')}`);
   if(p.fields.length||p.topic)L.push(`· 분야  ${[p.fields.join(', '),p.topic].filter(Boolean).join(' — ')}`);
+  if(p.activities)String(p.activities).split('\n').filter(Boolean).forEach((a,i)=>L.push(`${i===0?'· 활동  ':'        '}${a.trim()}`));
   return L.join('\n');
 }
 async function copyText(t){
@@ -860,6 +864,7 @@ function openForm(id){
       <div class="f full"><span class="lab">주요 경력</span><div class="lock">${LISTS.careers.hint}</div><div data-listwrap="careers">${listHTML('careers')}</div></div>
       <div class="f full" style="margin-top:16px"><span class="lab">학력</span><div class="lock">${LISTS.edus.hint}</div><div data-listwrap="edus">${listHTML('edus')}</div></div>
       <div class="f full" style="margin-top:16px"><span class="lab">자격</span><div class="lock">${LISTS.certs.hint}</div><div data-listwrap="certs">${listHTML('certs')}</div></div>
+      <div class="f full" style="margin-top:16px"><label>주요 활동·저서</label><div class="lock">강사 본인의 대외 출강처·저서·활동 (우리 쪽 투입은 하단 「투입이력」에)</div>${ta('activities','(강의) 공무원연금공단, 서울시 인재개발원 외\n(저서) …')}</div>
     </div>
     <div class="fs"><div class="eb">02 Field <em>분야 · 대상</em></div>
       <div class="fgrid">
@@ -1009,6 +1014,55 @@ function previewPaste(){
 function doPaste(){if(!parsed.length)return;DB.instructors.push(...parsed);persist(`일괄 등록 ${parsed.length}명`);const n=parsed.length;$('#pasteModal').classList.remove('open');render();toast(`${n}명을 등록했습니다 (검토 필요 표시)`);}
 
 /* =====================================================================
+   프로필 일괄 반영 (이름 기준 · 프로필 칸만 보충)
+   · 등급·코멘트·단가·출입정보·투입이력은 건드리지 않음
+   · 빈 칸만 채우고, 경력·학력·자격은 중복 없이 추가(상한 준수)
+   ===================================================================== */
+let profPlan=null;
+const nz=s=>String(s||'').replace(/[\s·.,()\/\-]/g,'').toLowerCase();
+function planProfiles(list){
+  const items=[];
+  list.forEach(src=>{
+    const name=String(src.name||'').trim();if(!name)return;
+    const found=DB.instructors.find(x=>x.name===name);
+    const p=found?clone(found):blank();const ch=[];
+    if(!found){p.name=name;p.status='검토중';p.needsReview=true;if(src.title)p.title=src.title;ch.push('신규 등록 (미평가 · 검토중)');}
+    ['org','topic'].forEach(k=>{if(src[k]&&!String(p[k]||'').trim()){p[k]=src[k];ch.push((k==='org'?'소속':'세부주제')+': '+src[k]);}});
+    ['fields','targets'].forEach(k=>(src[k]||[]).forEach(v=>{if(!p[k].includes(v)){p[k].push(v);ch.push((k==='fields'?'분야+':'대상+')+' '+v);}}));
+    const addList=(k,keyf,label)=>{let n=0,over=0;(src[k]||[]).forEach(it=>{const item=Object.assign(LISTS[k].blank(),it);if(p[k].some(x=>keyf(x)===keyf(item)))return;if(p[k].length>=MAX[k]){over++;return;}p[k].push(item);n++;});if(n)ch.push(`${label} +${n}`);if(over)ch.push(`${label} ${over}건은 최대 ${MAX[k]}개 초과로 제외`);};
+    addList('careers',c=>nz(c.org)+'|'+nz(c.role),'경력');
+    addList('edus',e=>nz(e.school)+'|'+nz(e.degree),'학력');
+    addList('certs',c=>nz(c.name),'자격');
+    if(src.activities){const cur=String(p.activities||'');if(!cur.trim()){p.activities=src.activities;ch.push('주요 활동·저서');}else if(!nz(cur).includes(nz(src.activities))){p.activities=cur.trim()+'\n'+src.activities;ch.push('주요 활동·저서 추가');}}
+    items.push({p,isNew:!found,ch});
+  });
+  return items;
+}
+function openProfileImport(){$('#profIn').value='';$('#profIn').click();}
+$('#profIn').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const o=JSON.parse(await f.text());const list=Array.isArray(o)?o:o.profiles;
+    if(!Array.isArray(list))throw new Error('프로필 반영용 파일이 아닙니다 (profiles 목록 없음)');
+    if(o&&Array.isArray(o.instructors))throw new Error('이 파일은 전체 백업입니다 — 「JSON 백업 가져오기」를 쓰세요');
+    profPlan=planProfiles(list);
+    const changed=profPlan.filter(x=>x.ch.length);
+    $('#pasteBox').innerHTML=`<div class="m-head"><h2>프로필 일괄 반영</h2><i>Profile merge</i><button class="x" data-act="closePaste">×</button></div>
+    <div class="m-body"><div class="fs" style="border:0">
+      <p style="font-size:14px;line-height:1.65;margin:0 0 6px">${esc(o.source||f.name)} — <b>${profPlan.length}명</b> 중 <b>반영 ${changed.length}명</b> (신규 ${changed.filter(x=>x.isNew).length}명). 등급·코멘트·단가·출입정보·투입이력은 변경되지 않습니다.</p>
+      <div class="pv" style="max-height:340px">${profPlan.map(x=>`<div style="padding:6px 0;border-bottom:1px dashed var(--line-2)"><b>${esc(x.p.name)}</b> ${x.isNew?'<span class="chip rev">신규</span>':''}<div class="sub">${x.ch.length?esc(x.ch.join(' · ')):'변경 없음 (이미 반영됨)'}</div></div>`).join('')}</div>
+    </div></div>
+    <div class="m-foot"><button class="btn line" data-act="closePaste">취소</button><button class="btn red" data-act="applyProfiles" ${changed.length?'':'disabled'}>반영</button></div>`;
+    $('#pasteModal').classList.add('open');
+  }catch(err){toast('불러오기 실패: '+err.message);}
+});
+function applyProfiles(){
+  if(!profPlan)return;const now=nowISO();let n=0;
+  profPlan.filter(x=>x.ch.length).forEach(x=>{x.p.updatedAt=now;const i=DB.instructors.findIndex(y=>y.id===x.p.id);if(i>=0)DB.instructors[i]=x.p;else DB.instructors.push(x.p);n++;});
+  profPlan=null;$('#pasteModal').classList.remove('open');persist(`프로필 반영 ${n}명`);render();toast(`${n}명의 프로필을 반영했습니다`);
+}
+
+/* =====================================================================
    전역 이벤트
    ===================================================================== */
 document.addEventListener('click',async e=>{
@@ -1035,6 +1089,8 @@ document.addEventListener('click',async e=>{
       case 'importJson':return importJson();
       case 'exportCsv':return exportCsv();
       case 'paste':return openPaste();
+      case 'profImport':return openProfileImport();
+      case 'applyProfiles':return applyProfiles();
       case 'closePaste':$('#pasteModal').classList.remove('open');return;
       case 'doPaste':return doPaste();
       case 'reset':Object.assign(F,{q:'',field:'',grade:'',target:'',tone:'',payment:'',rate:'',status:''});$('#q').value='';return render();
