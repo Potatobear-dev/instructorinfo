@@ -221,7 +221,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .lock{font-size:12px;color:var(--muted);font-weight:600;margin:-4px 0 10px}
 
 /* ---------- toast ---------- */
-.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,30px);opacity:0;background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-size:14px;font-weight:700;z-index:120;transition:.25s;pointer-events:none;box-shadow:var(--shadow)}
+.toast{max-width:min(720px,calc(100% - 32px));text-align:center;line-height:1.5;position:fixed;left:50%;bottom:26px;transform:translate(-50%,30px);opacity:0;background:var(--ink);color:#fff;padding:12px 20px;border-radius:18px;font-size:14px;font-weight:700;z-index:120;transition:.25s;pointer-events:none;box-shadow:var(--shadow)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .banner{background:#fff4ef;border:1px solid rgba(193,70,42,.3);color:var(--red-dark);border-radius:14px;padding:12px 16px;font-size:13.5px;font-weight:700;margin-top:16px;display:none;align-items:center;gap:12px;flex-wrap:wrap}
 .banner.show{display:flex}
@@ -332,7 +332,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const uid=()=>'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const nowISO=()=>new Date().toISOString();
 const clone=o=>JSON.parse(JSON.stringify(o));
-function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2200);}
+function toast(msg,ms){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),ms||2200);}
 function fmtTime(iso){if(!iso)return '—';const d=new Date(iso);const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
 
 function blank(){
@@ -969,6 +969,7 @@ $('#formBox').addEventListener('change',e=>{
 });
 $('#formBox').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||!draft)return;
+  if(b.dataset.photo==='clip'){(async()=>{let blob=null;try{blob=await imageFromClipboardAPI();}catch(e){}if(blob)setDraftPhoto(blob);else photoHelp();})();return;}
   if(b.dataset.photo==='pick'){$('#photoFile').value='';$('#photoFile').click();return;}
   if(b.dataset.photo==='remove'){if(draft._photoPreview)URL.revokeObjectURL(draft._photoPreview);draft._photoBlob=null;draft._photoPreview=null;draft._photoRemove=!!draft.photo;refreshPhotoBox();return;}
   if(b.dataset.chip){const arr=getPath(draft,b.dataset.chip);const v=b.dataset.val;const i=arr.indexOf(v);if(i>=0)arr.splice(i,1);else arr.push(v);b.setAttribute('aria-pressed',i<0);}
@@ -1027,8 +1028,10 @@ async function shrink(file){
   }finally{URL.revokeObjectURL(url);}
 }
 async function setDraftPhoto(file){
-  if(!draft||!file||!/^image\//.test(file.type))return toast('이미지 파일만 넣을 수 있습니다');
-  const b=await shrink(file);if(!b)return toast('이미지를 처리하지 못했습니다');
+  if(!draft||!file)return photoHelp();
+  if(file.type&&!OK_IMG.test(file.type))return photoHelp();
+  let b=null;try{b=await shrink(file);}catch(e){b=null;}
+  if(!b)return photoHelp();
   if(draft._photoPreview)URL.revokeObjectURL(draft._photoPreview);
   draft._photoBlob=b;draft._photoPreview=URL.createObjectURL(b);draft._photoRemove=false;
   refreshPhotoBox();
@@ -1037,9 +1040,9 @@ function refreshPhotoBox(){const w=$('#photoBox');if(!w)return;w.innerHTML=photo
 function photoBoxHTML(){
   const has=draft._photoBlob||(draft.photo&&!draft._photoRemove);
   return `<div class="ph-edit">${avatar(draft,'lg')}<div class="ph-btns">
-    <button type="button" class="btn sm line" data-photo="pick">사진 선택</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn sm line" data-photo="pick">사진 선택</button><button type="button" class="btn sm line" data-photo="clip">클립보드에서 붙여넣기</button></div>
     ${has?'<button type="button" class="btn sm danger" data-photo="remove">사진 삭제</button>':''}
-    <div class="sub">또는 제안서·이력서에서 사진을 복사해 이 창에서 <b>Ctrl+V</b></div></div></div>`;
+    <div class="sub">PPT 사진 복사 후 이 창에서 <b>Ctrl+V</b> · 안 되면 <b>Win+Shift+S</b>로 사진 부분 캡처 후 Ctrl+V · 파일 끌어다 놓기도 가능</div></div></div>`;
 }
 async function ghPutBytes(path,bytes,msg,sha){
   const body={message:msg,content:b64enc(bytes),branch:CFG.branch};if(sha)body.sha=sha;
@@ -1065,11 +1068,48 @@ async function uploadDraftPhoto(){
   photoURLs.set(path+'@'+sha,draft._photoPreview);draft._photoPreview=null;
   draft.photo={path,sha};
 }
+/* 클립보드·드래그에서 이미지 꺼내기 — PPT·웹·캡처 도구 등 여러 형식 대응 */
+const OK_IMG=/^image\/(png|jpe?g|webp|gif|bmp)$/i;
+const imgFromHTML=html=>{const m=String(html||'').match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);return m?m[1].replace(/&amp;/g,'&'):null;};
+async function blobFromSrc(src){
+  if(!src)return null;
+  if(/^data:image\//i.test(src)){try{return await (await fetch(src)).blob();}catch(e){return null;}}
+  if(/^https?:/i.test(src)){try{const r=await fetch(src);if(r.ok){const b=await r.blob();if(OK_IMG.test(b.type))return b;}}catch(e){}}
+  return null;   // file:/// (오피스 임시파일) 등은 브라우저가 읽을 수 없음
+}
+function imageFromDT(dt){   // 동기 구간: 이벤트 안에서 바로 호출
+  if(!dt)return {file:null,src:null,any:false};
+  const files=[...(dt.files||[])];
+  const items=[...(dt.items||[])].filter(i=>i.kind==='file').map(i=>i.getAsFile()).filter(Boolean);
+  const all=files.concat(items);
+  const file=all.find(f=>OK_IMG.test(f.type))||all.find(f=>!f.type)||null;
+  let html='';try{html=dt.getData('text/html');}catch(e){}
+  const src=imgFromHTML(html);
+  return {file,src,any:!!(all.length||src)};
+}
+async function imageFromClipboardAPI(){
+  if(!navigator.clipboard||!navigator.clipboard.read)return null;
+  const list=await navigator.clipboard.read();
+  for(const it of list){const t=it.types.find(x=>OK_IMG.test(x));if(t)return await it.getType(t);}
+  for(const it of list){if(it.types.includes('text/html')){const b=await blobFromSrc(imgFromHTML(await (await it.getType('text/html')).text()));if(b)return b;}}
+  return null;
+}
+function photoHelp(){toast('이 그림 형식은 브라우저가 읽을 수 없습니다 — PPT에서 사진을 Win+Shift+S로 캡처해 Ctrl+V 하거나, 우클릭 → 「그림으로 저장」 후 「사진 선택」',6000);}
+async function takeImage(found){
+  let blob=found.file;
+  if(!blob&&found.src)blob=await blobFromSrc(found.src);
+  if(!blob){try{blob=await imageFromClipboardAPI();}catch(e){}}
+  if(!blob)return photoHelp();
+  setDraftPhoto(blob);
+}
 document.addEventListener('paste',e=>{
   if(!draft||!$('#formModal').classList.contains('open'))return;
-  const it=[...(e.clipboardData&&e.clipboardData.items||[])].find(x=>x.type.startsWith('image/'));
-  if(!it)return;e.preventDefault();setDraftPhoto(it.getAsFile());
+  const found=imageFromDT(e.clipboardData);
+  if(!found.any)return;                 // 글자 붙여넣기는 그대로 둠
+  e.preventDefault();takeImage(found);
 });
+$('#formBox').addEventListener('dragover',e=>{if(draft&&e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){e.preventDefault();}});
+$('#formBox').addEventListener('drop',e=>{if(!draft)return;const found=imageFromDT(e.dataTransfer);if(!found.any)return;e.preventDefault();takeImage(found);});
 $('#photoFile').addEventListener('change',e=>{const f=e.target.files[0];if(f)setDraftPhoto(f);});
 
 /* =====================================================================
