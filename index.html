@@ -95,6 +95,15 @@ button{cursor:pointer}
 .c-name small{font-size:13px;font-weight:700;color:var(--muted);margin-left:5px}
 .c-org{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px}
 .c-head .g{margin-left:auto}
+.av{width:56px;height:56px;border-radius:16px;background:var(--paper-2);border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;flex:none;color:#a99a83;font-weight:900;font-size:20px}
+.av img{width:100%;height:100%;object-fit:cover;object-position:center 22%;display:block}
+.av.has{border-color:transparent}
+.av.d{width:72px;height:88px;border-radius:18px;font-size:26px}
+.av.lg{width:96px;height:116px;border-radius:18px;font-size:30px}
+.ph-edit{display:flex;gap:16px;align-items:center}
+.ph-btns{display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+.cnt{font-size:11.5px;font-weight:700;color:var(--muted);margin-left:6px}
+.cnt.over{color:var(--red)}
 .chips{display:flex;flex-wrap:wrap;gap:5px}
 .chip{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:rgba(24,21,17,.05);color:#5d544a;font-size:11.5px;font-weight:700}
 .chip.t{background:rgba(123,209,182,.18);color:#2a6f5c}
@@ -105,7 +114,7 @@ button{cursor:pointer}
 .c-meta .muted{color:var(--muted);font-weight:600}
 .c-prof{font-size:12.5px;color:var(--muted);line-height:1.55;font-weight:600}
 .c-prof b{color:var(--ink);font-weight:700}
-.c-cmt{font-size:13.5px;line-height:1.55;color:#3f382f;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c-cmt{overflow-wrap:anywhere;font-size:13.5px;line-height:1.55;color:#3f382f;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .c-foot{margin-top:auto;font-size:12px;color:var(--muted);font-weight:700;display:flex;justify-content:space-between;gap:8px}
 .empty{grid-column:1/-1;text-align:center;padding:80px 20px;color:var(--muted)}
 .empty b{display:block;font-size:20px;color:var(--ink);margin-bottom:8px}
@@ -126,7 +135,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;min-width:1100px}
 .drawer.open{transform:none}
 .d-head{padding:24px 26px 18px;border-bottom:1px solid var(--line);background:linear-gradient(145deg,#fffdf8,#f8f2e8)}
 .d-top{display:flex;gap:14px;align-items:flex-start}
-.d-top .g{width:46px;height:46px;font-size:24px}
+.d-top .g{width:46px;height:46px;font-size:24px;margin-left:auto}
+.d-top .x{margin-left:4px}
 .d-name{font-size:26px;font-weight:900;letter-spacing:-.035em}
 .d-name small{font-size:15px;color:var(--muted);margin-left:6px;font-weight:700}
 .d-org{color:var(--muted);font-weight:600;font-size:14px;margin-top:3px}
@@ -151,7 +161,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.5px;min-width:1100px}
 .more{border:0;background:none;color:var(--red-dark);font-weight:700;font-size:13px;padding:6px 0 0 16px}
 .big-rate{font-size:30px;font-weight:900;letter-spacing:-.03em;color:var(--red-dark)}
 .big-rate small{font-size:14px;color:var(--muted);font-weight:700;margin-left:4px}
-.note{background:var(--paper);border:1px dashed var(--line);border-radius:12px;padding:11px 13px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;margin-top:8px}
+.note{overflow-wrap:anywhere;background:var(--paper);border:1px dashed var(--line);border-radius:12px;padding:11px 13px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;margin-top:8px}
 .note b{display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px;letter-spacing:.04em}
 .mask{font-family:ui-monospace,Consolas,monospace;letter-spacing:.02em}
 .eye{border:1px solid var(--line);background:var(--white);border-radius:999px;font-size:12px;font-weight:700;padding:3px 10px;margin-left:8px;color:var(--muted)}
@@ -242,7 +252,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
     <div class="brand"><b>HRI 강사 DB</b><i>Instructor Index</i><span class="cnt" id="cnt"></span></div>
     <div class="search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="이름 · 주제 · 고객사 · 경력 · 자격 · 코멘트 전체 검색">
+      <input id="q" type="search" placeholder="이름 · 주제 · 고객사 · 경력 · 자격 · 정성평가 전체 검색">
     </div>
     <div class="acts" style="display:flex;gap:8px">
       <button class="btn red" id="btnAdd">+ 강사 등록</button>
@@ -288,6 +298,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 <div class="modal" id="unlockModal"><div class="m-box" id="unlockBox" style="width:min(440px,100%)"></div></div>
 <input type="file" id="fileIn" accept=".json,application/json" hidden>
 <input type="file" id="profIn" accept=".json,application/json" hidden>
+<input type="file" id="photoFile" accept="image/*" hidden>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -327,7 +338,7 @@ function fmtTime(iso){if(!iso)return '—';const d=new Date(iso);const p=n=>Stri
 function blank(){
   const n=nowISO();
   return {id:uid(),name:'',title:'강사',org:'',grade:'',status:'활성',
-    careers:[],edus:[],certs:[],activities:'',
+    careers:[],edus:[],certs:[],activities:'',photo:null,
     fields:[],topic:'',targets:[],
     tone:'',method:'',interaction:'',strengths:'',cautions:'',comment:'',
     fee:{unit:'',amount:'',minTime:'',special:''},
@@ -526,8 +537,8 @@ function openConnect(){
       <div class="f"><label>GitHub 아이디</label><input class="inp" id="cOwner" value="${esc(c.owner)}"></div>
       <div class="f"><label>데이터 저장소 이름</label><input class="inp" id="cRepo" value="${esc(c.repo)}"></div>
       <div class="f full"><label>토큰 (github_pat_…)</label><input class="inp" id="cToken" type="password" autocomplete="off" placeholder="${CFG?'저장됨 — 바꿀 때만 입력':'Bitwarden에 저장해 둔 토큰 붙여넣기'}"></div>
-      <div class="f full"><label>출입정보 암호 문구 ${firstPass?'<span class="req">* 처음 1회 설정</span>':'(휴대폰·차량번호를 볼 때 필요)'}</label><input class="inp" id="cPass" type="password" autocomplete="new-password" placeholder="${firstPass?'새로 정할 암호 문구 (잊으면 출입정보 복구 불가)':'비워두면 출입정보만 잠긴 채로 사용'}">
-        ${firstPass?'<input class="inp" id="cPass2" type="password" autocomplete="new-password" placeholder="암호 문구 한 번 더" style="margin-top:6px">':''}
+      <div class="f full"><label>출입정보 암호 문구 ${firstPass?'<span class="sub">(이미 쓰던 데이터면 기존 문구 · 맨 처음 설정이면 새 문구)</span>':'(휴대폰·차량번호를 볼 때 필요)'}</label><input class="inp" id="cPass" type="password" autocomplete="off" placeholder="${firstPass?'암호 문구 (잊으면 출입정보 복구 불가)':'비워두면 출입정보만 잠긴 채로 사용'}">
+        ${firstPass?'<input class="inp" id="cPass2" type="password" autocomplete="off" placeholder="맨 처음 설정할 때만 — 한 번 더 입력" style="margin-top:6px">':''}
         <label style="display:flex;gap:7px;align-items:center;font-size:13px;color:var(--muted);font-weight:600;margin-top:6px"><input type="checkbox" id="cRemember" checked> 이 기기에서 암호 문구 기억 (공용 PC에서는 해제)</label></div>
     </div>
     <div class="banner" id="connErr" style="margin-top:14px"></div>
@@ -540,9 +551,9 @@ function connError(m){const b=$('#connErr');b.innerHTML='<span>'+esc(m)+'</span>
 async function doConnect(){
   const owner=$('#cOwner').value.trim(),repo=$('#cRepo').value.trim();
   const token=$('#cToken').value.trim()||(CFG&&CFG.token)||'';
-  const pass=$('#cPass').value,pass2=$('#cPass2')?$('#cPass2').value:pass,remember=$('#cRemember').checked;
+  const pass=$('#cPass').value,pass2=$('#cPass2')?$('#cPass2').value:null,remember=$('#cRemember').checked;
   if(!owner||!repo||!token)return connError('아이디, 저장소 이름, 토큰을 모두 입력하세요');
-  if(pass!==pass2)return connError('암호 문구 두 칸이 서로 다릅니다');
+  const confirmNew=()=>{if(pass2===null||pass2==='')return '맨 처음 설정이므로 암호 문구를 아래 칸에 한 번 더 입력하세요';if(pass2!==pass)return '암호 문구 두 칸이 서로 다릅니다';return '';};
   const btn=$('#connBtn');btn.disabled=true;btn.textContent='확인 중…';
   const prev=CFG;CFG={owner,repo,path:'data.json',branch:'main',token};
   try{
@@ -554,9 +565,10 @@ async function doConnect(){
     if(r){
       KEY=null;SHA=r.sha;ingest(r.obj);
       if(DB.crypto){if(pass&&!(await unlock(pass))){CFG=prev;return connError('암호 문구가 기존 데이터와 다릅니다');}}
-      else{if(!pass){CFG=prev;return connError('출입정보 암호 문구를 정해 주세요 (처음 1회)');}await initCrypto(pass);needPush=true;}
+      else{if(!pass){CFG=prev;return connError('출입정보 암호 문구를 정해 주세요 (처음 1회)');}const ce=confirmNew();if(ce){CFG=prev;return connError(ce);}await initCrypto(pass);needPush=true;}
     }else{
       if(!pass){CFG=prev;return connError('데이터 파일이 아직 없습니다 — 출입정보 암호 문구를 정하면 새로 만듭니다');}
+      {const ce=confirmNew();if(ce){CFG=prev;return connError(ce);}}
       KEY=null;SHA=null;DB={version:2,updatedAt:nowISO(),crypto:null,instructors:[]};await initCrypto(pass);needPush=true;
     }
     if(pass)setPass(pass,remember);
@@ -597,7 +609,7 @@ async function exportJson(){try{const o=await serialize();download(`HRI_강사DB
 function exportCsv(){
   const cols=[['성함','name'],['호칭','title'],['소속','org'],['등급',p=>p.grade||'미평가'],['상태','status'],
     ['주요분야',p=>p.fields.join(', ')],['세부주제','topic'],['대상층',p=>p.targets.join(', ')],
-    ['톤','tone'],['진행방식','method'],['상호작용','interaction'],['강점','strengths'],['유의사항','cautions'],['종합코멘트','comment'],
+    ['톤','tone'],['진행방식','method'],['상호작용','interaction'],['강점','strengths'],['유의사항','cautions'],['강사 정성평가','comment'],
     ['강사료 기준',p=>p.fee.unit],['금액(만원)',p=>p.fee.amount],['시간당(만원)',p=>{const h=hourly(p);return h==null?'':Math.round(h*10)/10;}],['최소시간',p=>p.fee.minTime],['특약',p=>p.fee.special],
     ['섭외경로',p=>p.sourcing.channel],['섭외창구',p=>p.sourcing.contact],['지급방식','payment'],
     ['경력',p=>p.careers.map(careerText).join(' | ')],['학력',p=>p.edus.map(eduText).join(' | ')],['자격',p=>p.certs.map(c=>[c.name,c.issuer,c.year].filter(Boolean).join(' ')).join(' | ')],['주요 활동·저서','activities'],
@@ -706,7 +718,7 @@ function renderList(){
     :`<div class="grid"><div class="empty"><b>등록된 강사가 없습니다</b>「+ 강사 등록」, 「데이터 ▾ → JSON 백업 가져오기」(초기 데이터 파일) 또는 「시트 붙여넣기」로 시작하세요.</div></div>`;return;}
   if(!a.length){L.innerHTML=`<div class="grid"><div class="empty"><b>조건에 맞는 강사가 없습니다</b>필터를 조정하거나 초기화하세요.</div></div>`;return;}
   if(F.view==='table'){
-    L.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>등급</th><th>성함</th><th>소속</th><th>분야</th><th>대상</th><th>톤</th><th>시간당</th><th>지급</th><th>최근 투입</th><th>코멘트</th></tr></thead><tbody>${
+    L.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>등급</th><th>성함</th><th>소속</th><th>분야</th><th>대상</th><th>톤</th><th>시간당</th><th>지급</th><th>최근 투입</th><th>정성평가</th></tr></thead><tbody>${
       a.map(p=>{const ld=latestDep(p);const r=fmtRate(hourly(p));return `<tr data-id="${p.id}">
         <td>${gBadge(p.grade,'sm')}</td>
         <td><b>${esc(p.name)}</b> <span class="na">${esc(p.title)}</span>${p.needsReview?' <span class="chip rev">검토 필요</span>':''}</td>
@@ -720,13 +732,13 @@ function renderList(){
         <td class="cmt">${esc(p.comment)}</td></tr>`;}).join('')}</tbody></table></div>`;
     return;
   }
-  L.innerHTML=`<div class="grid">${a.map(card).join('')}</div>`;
+  L.innerHTML=`<div class="grid">${a.map(card).join('')}</div>`;hydratePhotos(L);
 }
 function card(p){
   const r=fmtRate(hourly(p));const ld=latestDep(p);const c0=p.careers[0];const td=topDegree(p);
   const prof=[c0?`<div><b>경력</b> ${esc(careerText(c0))}</div>`:'',td?`<div><b>학력</b> ${esc(eduText(td))}</div>`:''].join('');
   return `<article class="card ${p.status==='보류'?'dim':''}" data-id="${p.id}" tabindex="0">
-    <div class="c-head"><div><div class="c-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="c-org">${esc(p.org)||'&nbsp;'}</div></div>${gBadge(p.grade)}</div>
+    <div class="c-head">${avatar(p)}<div><div class="c-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="c-org">${esc(p.org)||'&nbsp;'}</div></div>${gBadge(p.grade)}</div>
     <div class="chips">${p.fields.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}${p.targets.map(t=>`<span class="chip t">${esc(t)}</span>`).join('')}${p.status!=='활성'?`<span class="chip st">${esc(p.status)}</span>`:''}${p.needsReview?'<span class="chip rev">검토 필요</span>':''}</div>
     ${p.topic?`<div class="c-prof">${esc(p.topic)}</div>`:''}
     <div class="c-meta"><span class="${r?'rate':'muted'}">${r||'단가 미입력'}</span><span class="muted">${esc(p.payment||'지급방식 미확인')}</span></div>
@@ -754,10 +766,11 @@ function drawDetail(){
   const accVal=v=>v?(showAccess?esc(v):`<span class="mask">${esc(maskStr(v))}</span>`):NA;
   $('#drawer').innerHTML=`
   <div class="d-head">
-    <div class="d-top">${gBadge(p.grade)}<div><div class="d-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="d-org">${esc(p.org)||'소속 미입력'} · ${esc(p.status)}${p.needsReview?' · <span class="chip rev">검토 필요</span>':''}</div></div><button class="x" data-act="closeDrawer" aria-label="닫기">×</button></div>
+    <div class="d-top">${avatar(p,'d')}<div><div class="d-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="d-org">${esc(p.org)||'소속 미입력'} · ${esc(p.status)}${p.needsReview?' · <span class="chip rev">검토 필요</span>':''}</div></div>${gBadge(p.grade)}<button class="x" data-act="closeDrawer" aria-label="닫기">×</button></div>
     <div class="d-actions"><button class="btn sm ink" data-act="edit">수정</button><button class="btn sm line" data-act="copyProfile">프로필 텍스트 복사</button><button class="btn sm line" data-act="dup">복제</button><button class="btn sm danger" data-act="del">삭제</button></div>
   </div>
   <div class="d-body">
+    <div class="sec"><div class="eb">Evaluation <em>강사 정성평가</em></div>${p.comment?`<div class="note" style="margin-top:0;font-size:14.5px;background:#fff8f2;border-color:rgba(193,70,42,.28)">${esc(p.comment)}</div>`:'<div class="na" style="font-size:13.5px">미입력</div>'}</div>
     <div class="sec"><div class="eb">Profile <em>경력 · 학력 · 자격</em></div>
       <div class="plabel">주요 경력</div>${plist(p.careers,'careers',c=>`<li>${esc([c.org,c.role].filter(Boolean).join(' '))}${c.period?`<span>${esc(c.period)}</span>`:''}</li>`,3)}
       <div class="plabel">학력</div>${plist(p.edus,'edus',e=>`<li>${esc([e.school,e.major].filter(Boolean).join(' '))}${e.degree?`<span>${esc(e.degree)}</span>`:''}</li>`,0)}
@@ -773,7 +786,6 @@ function drawDetail(){
       <dl class="kv"><dt>톤</dt><dd>${esc(p.tone)||NA}</dd><dt>진행방식</dt><dd>${esc(p.method)||NA}</dd><dt>상호작용</dt><dd>${esc(p.interaction)||NA}</dd></dl>
       ${p.strengths?`<div class="note"><b>강점</b>${esc(p.strengths)}</div>`:''}
       ${p.cautions?`<div class="note"><b>유의사항</b>${esc(p.cautions)}</div>`:''}
-      ${p.comment?`<div class="note"><b>종합 코멘트</b>${esc(p.comment)}</div>`:''}
     </div>
     <div class="sec"><div class="eb">Fee <em>강사료</em></div>
       <div class="big-rate">${r?esc(r.replace('만원/H',''))+'<small>만원 / 시간</small>':'<span class="na" style="font-size:16px">단가 미입력</span>'}</div>
@@ -791,6 +803,7 @@ function drawDetail(){
     </div>
     <div class="sub" style="padding-top:14px">등록 ${fmtTime(p.createdAt)} · 수정 ${fmtTime(p.updatedAt)}</div>
   </div>`;
+  hydratePhotos($('#drawer'));
 }
 function profileText(p){
   const L=[`■ ${p.name} ${p.title}${p.org?' / '+p.org:''}`];
@@ -852,12 +865,14 @@ function openForm(id){
   <div class="m-head"><h2>${isNew?'강사 등록':'강사 정보 수정'}</h2><i>${isNew?'New entry':esc(draft.name)}</i><button class="x" data-act="closeForm" aria-label="닫기">×</button></div>
   <div class="m-body">
     <div class="fs"><div class="eb">01 Basic <em>식별 · 평가</em></div>
+      <div class="f" style="margin-bottom:14px"><span class="lab">사진</span><div id="photoBox">${photoBoxHTML()}</div></div>
       <div class="fgrid c3">
         <div class="f"><label>성함 <span class="req">*</span></label>${inp('name','홍길동')}</div>
         <div class="f"><label>호칭</label>${selOrCustom('title',OPT.title)}</div>
         <div class="f"><label>소속</label>${inp('org','예: AI리더십연구소')}</div>
         <div class="f"><label>등급</label><select class="inp" data-path="grade"><option value="">미평가 (소개만 받음)</option>${[['A','A — 재섭외 우선'],['B','B — 주제·대상 맞으면 섭외'],['C','C — 보완 필요 · 비추천']].map(g=>`<option value="${g[0]}" ${draft.grade===g[0]?'selected':''}>${g[1]}</option>`).join('')}</select></div>
         <div class="f"><label>상태</label>${plainSel('status',OPT.status,'선택')}</div>
+        <div class="f full"><label>강사 정성평가 <span class="cnt ${(draft.comment||'').length>300?'over':''}" id="cmtCnt">${(draft.comment||'').length} / 300자</span></label><textarea class="inp" data-path="comment" maxlength="300" style="min-height:96px" placeholder="등급의 근거가 되는 주관적 평가 — 강의력·톤·몰입 유도·운영 협조·아쉬운 점 등 자유롭게">${esc(draft.comment||'')}</textarea></div>
       </div>
     </div>
     <div class="fs"><div class="eb">01 Basic <em>프로필 — 경력 · 학력 · 자격</em></div>
@@ -882,7 +897,6 @@ function openForm(id){
       <div class="fgrid" style="margin-top:12px">
         <div class="f"><label>강점</label>${ta('strengths','예: 단계별 전달 좋음, 돌발상황 대처 우수')}</div>
         <div class="f"><label>유의사항</label>${ta('cautions','예: 일정 조율 어려움, 요구사항 많음')}</div>
-        <div class="f full"><label>종합 코멘트</label>${ta('comment','참관 메모 원문을 자유롭게')}</div>
       </div>
     </div>
     <div class="fs"><div class="eb">04 Fee <em>강사료</em></div>
@@ -916,12 +930,21 @@ function openForm(id){
     </div>
   </div>
   <div class="m-foot"><span class="hint">${draft.needsReview?'시트에서 이관된 정보입니다 — 저장하면 「검토 필요」 표시가 해제됩니다':'저장 즉시 자동 보관됩니다'}</span><button class="btn line" data-act="closeForm">취소</button><button class="btn red" data-act="saveForm">저장</button></div>`;
-  $('#formModal').classList.add('open');ratePrev();
+  $('#formModal').classList.add('open');ratePrev();hydratePhotos($('#photoBox'));
   setTimeout(()=>{const n=$('[data-path="name"]',$('#formBox'));if(n&&isNew)n.focus();},50);
 }
-function closeForm(){$('#formModal').classList.remove('open');draft=null;}
-function saveForm(){
+function closeForm(){if(draft&&draft._photoPreview)URL.revokeObjectURL(draft._photoPreview);$('#formModal').classList.remove('open');draft=null;}
+async function saveForm(){
   if(!draft.name.trim()){toast('성함을 입력하세요');$('[data-path="name"]',$('#formBox')).focus();return;}
+  if(draft.comment&&draft.comment.length>300){toast('강사 정성평가는 300자까지입니다');return;}
+  if(draft._photoBlob||draft._photoRemove){
+    const btn=$('[data-act="saveForm"]',$('#formBox'));btn.disabled=true;btn.textContent='사진 저장 중…';
+    try{
+      if(draft._photoBlob)await uploadDraftPhoto();
+      else if(draft.photo){await ghDeletePath(draft.photo.path,draft.photo.sha,'사진 삭제: '+draft.name);draft.photo=null;}
+    }catch(e){btn.disabled=false;btn.textContent='저장';toast('사진 저장 실패: '+(isNetErr(e)?'네트워크를 확인하세요':e.message));return;}
+  }
+  delete draft._photoBlob;delete draft._photoRemove;delete draft._photoPreview;
   // 빈 행 정리
   const empty=o=>Object.values(o).every(v=>!String(v||'').trim());
   ['careers','edus','certs','deployments'].forEach(k=>draft[k]=draft[k].filter(x=>!empty(x)));
@@ -933,7 +956,7 @@ function saveForm(){
 // 폼 이벤트 위임
 $('#formBox').addEventListener('input',e=>{
   const t=e.target;if(!draft)return;
-  if(t.dataset.path){let v=t.value;setPath(draft,t.dataset.path,v);if(t.dataset.path.startsWith('fee.'))ratePrev();}
+  if(t.dataset.path){let v=t.value;setPath(draft,t.dataset.path,v);if(t.dataset.path.startsWith('fee.'))ratePrev();if(t.dataset.path==='comment'){const c=$('#cmtCnt');c.textContent=v.length+' / 300자';c.classList.toggle('over',v.length>300);}}
   if(t.dataset.list){draft[t.dataset.list][+t.dataset.i][t.dataset.k]=t.value;}
 });
 $('#formBox').addEventListener('change',e=>{
@@ -946,11 +969,108 @@ $('#formBox').addEventListener('change',e=>{
 });
 $('#formBox').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||!draft)return;
+  if(b.dataset.photo==='pick'){$('#photoFile').value='';$('#photoFile').click();return;}
+  if(b.dataset.photo==='remove'){if(draft._photoPreview)URL.revokeObjectURL(draft._photoPreview);draft._photoBlob=null;draft._photoPreview=null;draft._photoRemove=!!draft.photo;refreshPhotoBox();return;}
   if(b.dataset.chip){const arr=getPath(draft,b.dataset.chip);const v=b.dataset.val;const i=arr.indexOf(v);if(i>=0)arr.splice(i,1);else arr.push(v);b.setAttribute('aria-pressed',i<0);}
   else if(b.dataset.add){const k=b.dataset.add;if(draft[k].length<LISTS[k].max){draft[k].push(LISTS[k].blank());rerenderList(k);const ins=$$(`[data-list="${k}"]`,$('#formBox'));const last=ins[ins.length-LISTS[k].cells.length];if(last)last.focus();}}
   else if(b.dataset.rm){const k=b.dataset.rm;draft[k].splice(+b.dataset.i,1);rerenderList(k);}
   else if(b.dataset.mv){const k=b.dataset.mv,i=+b.dataset.i,j=i+(+b.dataset.d);const a=draft[k];if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];rerenderList(k);}
 });
+
+/* =====================================================================
+   강사 사진 — 비공개 저장소 photos/<id>.webp 에 개별 파일로 저장
+   · data.json에는 경로와 sha만 기록 (JSON 비대화 방지)
+   · 화면 표시는 토큰으로 내려받아 이 브라우저(IndexedDB)에 캐시
+   ===================================================================== */
+const photoURLs=new Map();      // key(path@sha) → objectURL
+const photoLoading=new Map();
+function pidb(){return new Promise((res,rej)=>{if(!('indexedDB' in window))return rej('no');const r=indexedDB.open('hri-idb-photos',1);r.onupgradeneeded=()=>r.result.createObjectStore('p');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function pGet(k){try{const d=await pidb();return await new Promise(res=>{const t=d.transaction('p').objectStore('p').get(k);t.onsuccess=()=>res(t.result||null);t.onerror=()=>res(null);});}catch(e){return null;}}
+async function pSet(k,v){try{const d=await pidb();await new Promise(res=>{const t=d.transaction('p','readwrite');t.objectStore('p').put(v,k);t.oncomplete=res;t.onerror=res;});}catch(e){}}
+const photoKey=ph=>ph&&ph.path?ph.path+'@'+ph.sha:'';
+const pathURL=path=>`${API}/repos/${encodeURIComponent(CFG.owner)}/${encodeURIComponent(CFG.repo)}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
+async function photoURL(ph){
+  const k=photoKey(ph);if(!k||!CFG)return null;
+  if(photoURLs.has(k))return photoURLs.get(k);
+  if(photoLoading.has(k))return photoLoading.get(k);
+  const job=(async()=>{
+    let blob=await pGet(k);
+    if(!blob){
+      const r=await fetch(`${pathURL(ph.path)}?ref=${encodeURIComponent(CFG.branch)}`,{headers:Object.assign(ghHeaders(),{'Accept':'application/vnd.github.raw'}),cache:'no-store'});
+      if(!r.ok)return null;blob=await r.blob();pSet(k,blob);
+    }
+    const u=URL.createObjectURL(blob);photoURLs.set(k,u);return u;
+  })().catch(()=>null).finally(()=>photoLoading.delete(k));
+  photoLoading.set(k,job);return job;
+}
+function initials(n){return esc(String(n||'?').trim().slice(0,1));}
+function avatar(p,cls){return `<div class="av ${cls||''}" data-ph="${p.id}"><span>${initials(p.name)}</span></div>`;}
+async function hydratePhotos(root){
+  for(const el of $$('[data-ph]',root||document)){
+    const id=el.dataset.ph;let src=null;
+    if(draft&&draft.id===id&&el.closest('#formBox')){if(draft._photoBlob){src=draft._photoPreview;}else if(draft._photoRemove)src=null;else if(draft.photo)src=await photoURL(draft.photo);}
+    else{const p=DB.instructors.find(x=>x.id===id);if(p&&p.photo)src=await photoURL(p.photo);}
+    if(src&&el.isConnected){el.innerHTML=`<img alt="" src="${src}">`;el.classList.add('has');}
+  }
+}
+/* 이미지 → 가로 최대 480px webp(미지원 시 jpeg) */
+async function shrink(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+    const sc=Math.min(1,480/Math.max(img.width,img.height));
+    const c=document.createElement('canvas');c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    let b=await new Promise(r=>c.toBlob(r,'image/webp',0.86));
+    if(!b||b.type!=='image/webp')b=await new Promise(r=>c.toBlob(r,'image/jpeg',0.88));
+    return b;
+  }finally{URL.revokeObjectURL(url);}
+}
+async function setDraftPhoto(file){
+  if(!draft||!file||!/^image\//.test(file.type))return toast('이미지 파일만 넣을 수 있습니다');
+  const b=await shrink(file);if(!b)return toast('이미지를 처리하지 못했습니다');
+  if(draft._photoPreview)URL.revokeObjectURL(draft._photoPreview);
+  draft._photoBlob=b;draft._photoPreview=URL.createObjectURL(b);draft._photoRemove=false;
+  refreshPhotoBox();
+}
+function refreshPhotoBox(){const w=$('#photoBox');if(!w)return;w.innerHTML=photoBoxHTML();hydratePhotos(w);}
+function photoBoxHTML(){
+  const has=draft._photoBlob||(draft.photo&&!draft._photoRemove);
+  return `<div class="ph-edit">${avatar(draft,'lg')}<div class="ph-btns">
+    <button type="button" class="btn sm line" data-photo="pick">사진 선택</button>
+    ${has?'<button type="button" class="btn sm danger" data-photo="remove">사진 삭제</button>':''}
+    <div class="sub">또는 제안서·이력서에서 사진을 복사해 이 창에서 <b>Ctrl+V</b></div></div></div>`;
+}
+async function ghPutBytes(path,bytes,msg,sha){
+  const body={message:msg,content:b64enc(bytes),branch:CFG.branch};if(sha)body.sha=sha;
+  const r=await fetch(pathURL(path),{method:'PUT',headers:Object.assign({'Content-Type':'application/json'},ghHeaders()),body:JSON.stringify(body)});
+  if(!r.ok)throw ghErr(r.status);return (await r.json()).content.sha;
+}
+async function ghPathSha(path){const r=await fetch(`${pathURL(path)}?ref=${encodeURIComponent(CFG.branch)}&_=${Date.now()}`,{headers:ghHeaders(),cache:'no-store'});if(!r.ok)return null;return (await r.json()).sha;}
+async function ghDeletePath(path,sha,msg){
+  if(!sha)sha=await ghPathSha(path);if(!sha)return;
+  const r=await fetch(pathURL(path),{method:'DELETE',headers:Object.assign({'Content-Type':'application/json'},ghHeaders()),body:JSON.stringify({message:msg,sha,branch:CFG.branch})});
+  if(!r.ok&&r.status!==404)throw ghErr(r.status);
+}
+async function uploadDraftPhoto(){
+  if(!CFG)throw new Error('GitHub 연결 후 사진을 저장할 수 있습니다');
+  const path=`photos/${draft.id}.${draft._photoBlob.type==='image/webp'?'webp':'jpg'}`;
+  const bytes=new Uint8Array(await draft._photoBlob.arrayBuffer());
+  let oldSha=draft.photo&&draft.photo.path===path?draft.photo.sha:null;
+  if(draft.photo&&draft.photo.path!==path){ghDeletePath(draft.photo.path,draft.photo.sha,'사진 교체: '+draft.name).catch(()=>{});}
+  let sha;
+  try{sha=await ghPutBytes(path,bytes,'사진: '+draft.name,oldSha);}
+  catch(e){if(e.status===409||e.status===422){sha=await ghPutBytes(path,bytes,'사진: '+draft.name,await ghPathSha(path));}else throw e;}
+  pSet(path+'@'+sha,draft._photoBlob);
+  photoURLs.set(path+'@'+sha,draft._photoPreview);draft._photoPreview=null;
+  draft.photo={path,sha};
+}
+document.addEventListener('paste',e=>{
+  if(!draft||!$('#formModal').classList.contains('open'))return;
+  const it=[...(e.clipboardData&&e.clipboardData.items||[])].find(x=>x.type.startsWith('image/'));
+  if(!it)return;e.preventDefault();setDraftPhoto(it.getAsFile());
+});
+$('#photoFile').addEventListener('change',e=>{const f=e.target.files[0];if(f)setDraftPhoto(f);});
 
 /* =====================================================================
    시트 붙여넣기 일괄 등록
@@ -1015,7 +1135,7 @@ function doPaste(){if(!parsed.length)return;DB.instructors.push(...parsed);persi
 
 /* =====================================================================
    프로필 일괄 반영 (이름 기준 · 프로필 칸만 보충)
-   · 등급·코멘트·단가·출입정보·투입이력은 건드리지 않음
+   · 등급·정성평가·단가·출입정보·투입이력은 건드리지 않음
    · 빈 칸만 채우고, 경력·학력·자격은 중복 없이 추가(상한 준수)
    ===================================================================== */
 let profPlan=null;
@@ -1049,7 +1169,7 @@ $('#profIn').addEventListener('change',async e=>{
     const changed=profPlan.filter(x=>x.ch.length);
     $('#pasteBox').innerHTML=`<div class="m-head"><h2>프로필 일괄 반영</h2><i>Profile merge</i><button class="x" data-act="closePaste">×</button></div>
     <div class="m-body"><div class="fs" style="border:0">
-      <p style="font-size:14px;line-height:1.65;margin:0 0 6px">${esc(o.source||f.name)} — <b>${profPlan.length}명</b> 중 <b>반영 ${changed.length}명</b> (신규 ${changed.filter(x=>x.isNew).length}명). 등급·코멘트·단가·출입정보·투입이력은 변경되지 않습니다.</p>
+      <p style="font-size:14px;line-height:1.65;margin:0 0 6px">${esc(o.source||f.name)} — <b>${profPlan.length}명</b> 중 <b>반영 ${changed.length}명</b> (신규 ${changed.filter(x=>x.isNew).length}명). 등급·정성평가·단가·출입정보·투입이력은 변경되지 않습니다.</p>
       <div class="pv" style="max-height:340px">${profPlan.map(x=>`<div style="padding:6px 0;border-bottom:1px dashed var(--line-2)"><b>${esc(x.p.name)}</b> ${x.isNew?'<span class="chip rev">신규</span>':''}<div class="sub">${x.ch.length?esc(x.ch.join(' · ')):'변경 없음 (이미 반영됨)'}</div></div>`).join('')}</div>
     </div></div>
     <div class="m-foot"><button class="btn line" data-act="closePaste">취소</button><button class="btn red" data-act="applyProfiles" ${changed.length?'':'disabled'}>반영</button></div>`;
@@ -1100,8 +1220,8 @@ document.addEventListener('click',async e=>{
       case 'saveForm':return saveForm();
       case 'toggleAccess':showAccess=!showAccess;return drawDetail();
       case 'copyProfile':if(p){const ok=await copyText(profileText(p));toast(ok?'제안서용 프로필 텍스트를 복사했습니다':'복사에 실패했습니다');}return;
-      case 'dup':if(p){const c=clone(p);c.id=uid();c.name=p.name+' (복제)';c.createdAt=c.updatedAt=nowISO();DB.instructors.push(c);persist('복제: '+p.name);renderList();openDrawer(c.id);toast('복제했습니다');}return;
-      case 'del':if(p&&confirm(`「${p.name}」 강사를 삭제할까요? 되돌릴 수 없습니다.`)){DB.instructors=DB.instructors.filter(x=>x.id!==p.id);persist('삭제: '+p.name);closeDrawer();renderList();toast('삭제했습니다');}return;
+      case 'dup':if(p){const c=clone(p);c.id=uid();c.photo=null;c.name=p.name+' (복제)';c.createdAt=c.updatedAt=nowISO();DB.instructors.push(c);persist('복제: '+p.name);renderList();openDrawer(c.id);toast('복제했습니다');}return;
+      case 'del':if(p&&confirm(`「${p.name}」 강사를 삭제할까요? 되돌릴 수 없습니다.`)){if(p.photo&&CFG)ghDeletePath(p.photo.path,p.photo.sha,'사진 삭제: '+p.name).catch(()=>{});DB.instructors=DB.instructors.filter(x=>x.id!==p.id);persist('삭제: '+p.name);closeDrawer();renderList();toast('삭제했습니다');}return;
     }
   }
   const more=e.target.closest('[data-more]');if(more){expanded[more.dataset.more]=!expanded[more.dataset.more];drawDetail();return;}
