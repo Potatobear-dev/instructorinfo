@@ -72,6 +72,17 @@ button{cursor:pointer}
 .tab.on{color:var(--ink);border-bottom-color:var(--red)}
 .tab.on b{background:var(--ink);color:#fff}
 .chip.star{background:#fff1d6;color:#8a5a00}
+.rng{display:flex;flex-direction:column;gap:9px;min-width:300px;width:340px;max-width:100%;border:1px solid var(--line);border-radius:18px;background:var(--white);padding:9px 18px 12px}
+.rng.on{border-color:var(--red)}
+.rng-top{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px}
+.rng-top b{font-weight:800;color:var(--ink)}
+.rng.on .rng-top b{color:var(--red-dark)}
+.rng-none{display:inline-flex;gap:5px;align-items:center;font-size:12px;color:var(--muted);font-weight:700;white-space:nowrap}
+.rng-track{position:relative;height:6px;border-radius:99px;background:var(--line-2);margin:8px 11px 4px;touch-action:none;cursor:pointer}
+.rng-track::before{content:"";position:absolute;left:-14px;right:-14px;top:-14px;bottom:-14px}
+.rng-fill{position:absolute;top:0;bottom:0;background:var(--red);border-radius:99px;left:0;width:100%}
+.rng-th{position:absolute;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;border:3px solid var(--ink);background:#fff;padding:0;cursor:grab;touch-action:none;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.rng-th:hover,.rng-th:focus-visible,.rng-th.act{border-color:var(--red);outline:0;transform:scale(1.12);cursor:grabbing;z-index:3}
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0 10px}
 .sel{height:38px;border-radius:999px;border:1px solid var(--line);background:var(--white);padding:0 34px 0 14px;font-size:13.5px;font-weight:700;appearance:none;-webkit-appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c6255' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;cursor:pointer}
@@ -680,7 +691,7 @@ function renderSync(){
 /* =====================================================================
    목록 · 필터
    ===================================================================== */
-const F={q:'',tab:'main',field:'',grade:'',target:'',tone:'',payment:'',rate:'',status:'',sort:'grade',view:'card'};
+const F={q:'',tab:'main',field:'',grade:'',target:'',tone:'',payment:'',rate:'',rlo:0,rhi:1000,rnone:false,status:'',sort:'grade',view:'card'};
 try{const v=localStorage.getItem('hri_idb_view');if(v)Object.assign(F,JSON.parse(v),{q:''});}catch(e){}
 function saveView(){try{localStorage.setItem('hri_idb_view',JSON.stringify({sort:F.sort,view:F.view,tab:F.tab}));}catch(e){}}
 
@@ -688,6 +699,56 @@ function renderTabs(){
   const el=$('#tabs');if(!el)return;
   el.innerHTML=KINDS.map(k=>`<button class="tab ${F.tab===k[0]?'on':''}" data-tab="${k[0]}">${k[1]}<b>${DB.instructors.filter(p=>p.kinds.includes(k[0])).length}</b></button>`).join('');
 }
+/* ---------- 단가 범위 슬라이더 (일반 탭: 시간당 · 특강 탭: 회당 금액) ---------- */
+function sval(p){return F.tab==='special'?feeAmt(p):hourly(p);}
+function niceVal(v){return v<30?Math.round(v):v<100?Math.round(v/5)*5:v<300?Math.round(v/10)*10:Math.round(v/50)*50;}
+function rangeMax(){
+  let m=0;DB.instructors.forEach(p=>{if(p.kinds.includes(F.tab)){const v=sval(p);if(v!=null&&v>m)m=v;}});
+  return Math.max(20,Math.ceil(m/10)*10);
+}
+function posVal(pos,max){const r=pos/1000;return niceVal(max>150?max*r*r:max*r);}   // 고단가 이상치가 있으면 완만한 곡선 눈금
+function rangeVals(){const max=rangeMax();return {max,lo:F.rlo<=0?0:posVal(F.rlo,max),hi:F.rhi>=1000?Infinity:posVal(F.rhi,max)};}
+function rangeLabel(){const R=rangeVals();const u=F.tab==='special'?'회당':'시간당';
+  if(F.rlo<=0&&F.rhi>=1000)return `${u} 전체 (0 ~ ${R.max}만원 이상)`;
+  return `${u} ${R.lo}만원 ~ ${R.hi===Infinity?R.max+'만원 이상':R.hi+'만원'}`;}
+function rangeHTML(){
+  const act=F.rlo>0||F.rhi<1000;
+  return `<div class="rng ${act?'on':''}" id="rng"><div class="rng-top"><b id="rngLab">${esc(rangeLabel())}</b><label class="rng-none"><input type="checkbox" data-rnone ${F.rnone?'checked':''}> 미입력 포함</label></div>
+  <div class="rng-track" id="rngTrack"><div class="rng-fill" id="rngFill" style="left:${F.rlo/10}%;width:${(F.rhi-F.rlo)/10}%"></div>
+    <button type="button" class="rng-th" data-th="lo" role="slider" aria-label="최소 단가" aria-valuemin="0" aria-valuemax="1000" aria-valuenow="${F.rlo}" style="left:${F.rlo/10}%"></button>
+    <button type="button" class="rng-th" data-th="hi" role="slider" aria-label="최대 단가" aria-valuemin="0" aria-valuemax="1000" aria-valuenow="${F.rhi}" style="left:${F.rhi/10}%"></button></div></div>`;
+}
+function paintRange(){
+  const el=$('#rng');if(!el)return;
+  $('#rngLab').textContent=rangeLabel();el.classList.toggle('on',F.rlo>0||F.rhi<1000);
+  const f=$('#rngFill');f.style.left=F.rlo/10+'%';f.style.width=(F.rhi-F.rlo)/10+'%';
+  $$('.rng-th',el).forEach(t=>{const k=t.dataset.th;const v=k==='lo'?F.rlo:F.rhi;t.style.left=v/10+'%';t.setAttribute('aria-valuenow',v);});
+}
+let rngRaf=0;
+function rangeChanged(){paintRange();cancelAnimationFrame(rngRaf);rngRaf=requestAnimationFrame(renderList);}
+function setThumb(k,pos){pos=Math.max(0,Math.min(1000,Math.round(pos)));if(k==='lo')F.rlo=Math.min(pos,F.rhi);else F.rhi=Math.max(pos,F.rlo);rangeChanged();}
+(function(){
+  const host=$('#filters');let drag=null;
+  const posOf=e=>{const r=$('#rngTrack').getBoundingClientRect();return (e.clientX-r.left)/r.width*1000;};
+  host.addEventListener('pointerdown',e=>{
+    const th=e.target.closest('[data-th]');
+    if(th){drag=th.dataset.th;th.setPointerCapture(e.pointerId);th.classList.add('act');e.preventDefault();return;}
+    const tr=e.target.closest('#rngTrack');
+    if(tr){const p=posOf(e);const k=Math.abs(p-F.rlo)<=Math.abs(p-F.rhi)?'lo':'hi';setThumb(k,p);drag=k;const t=$(`[data-th="${k}"]`,host);if(t){t.setPointerCapture(e.pointerId);t.classList.add('act');}e.preventDefault();}
+  });
+  host.addEventListener('pointermove',e=>{if(drag)setThumb(drag,posOf(e));});
+  const end=()=>{drag=null;$$('.rng-th.act',host).forEach(t=>t.classList.remove('act'));};
+  host.addEventListener('pointerup',end);host.addEventListener('pointercancel',end);
+  host.addEventListener('keydown',e=>{
+    const th=e.target.closest&&e.target.closest('[data-th]');if(!th)return;
+    const step=e.shiftKey?50:10;const k=th.dataset.th;const cur=k==='lo'?F.rlo:F.rhi;
+    if(e.key==='ArrowRight'||e.key==='ArrowUp'){setThumb(k,cur+step);e.preventDefault();}
+    else if(e.key==='ArrowLeft'||e.key==='ArrowDown'){setThumb(k,cur-step);e.preventDefault();}
+    else if(e.key==='Home'){setThumb(k,0);e.preventDefault();}
+    else if(e.key==='End'){setThumb(k,1000);e.preventDefault();}
+  });
+  host.addEventListener('change',e=>{if(e.target.matches('[data-rnone]')){F.rnone=e.target.checked;renderList();}});
+})();
 function renderFilters(){
   const s=(key,label,opts)=>`<select class="sel ${F[key]?'on':''}" data-f="${key}"><option value="">${label}</option>${opts.map(o=>`<option value="${esc(o[0])}" ${F[key]===o[0]?'selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
   const pair=a=>a.map(x=>[x,x]);
@@ -697,7 +758,7 @@ function renderFilters(){
     s('target','대상층 전체',pair(OPT.targets))+
     s('tone','톤 전체',pair(OPT.tone))+
     s('payment','지급방식 전체',pair(OPT.payment))+
-    (F.tab==='special'?s('rate','회당 강사료 전체',[['lo','~100만원'],['mid','100~300만원'],['hi','300만원~'],['none','미입력']]):s('rate','시간당 단가 전체',[['lo','~30만원'],['mid','30~80만원'],['hi','80만원~'],['none','미입력']]))+
+    rangeHTML()+
     s('status','상태 전체',pair(OPT.status))+
     `<button class="btn sm line" data-act="reset">초기화</button><span class="sp"></span>`+
     `<select class="sel" data-f="sort"><option value="grade" ${F.sort==='grade'?'selected':''}>등급순</option><option value="recent" ${F.sort==='recent'?'selected':''}>최근 투입순</option><option value="rateAsc" ${F.sort==='rateAsc'?'selected':''}>단가 낮은순</option><option value="rateDesc" ${F.sort==='rateDesc'?'selected':''}>단가 높은순</option><option value="name" ${F.sort==='name'?'selected':''}>이름순</option><option value="updated" ${F.sort==='updated'?'selected':''}>최근 수정순</option></select>`+
@@ -741,11 +802,10 @@ function filtered(){
     if(F.tone&&p.tone!==F.tone)return false;
     if(F.payment&&p.payment!==F.payment)return false;
     if(F.status&&p.status!==F.status)return false;
-    if(F.rate&&F.tab==='special'){const a=feeAmt(p);if(F.rate==='none'){if(a!=null)return false;}else{if(a==null)return false;if(F.rate==='lo'&&a>100)return false;if(F.rate==='mid'&&(a<=100||a>300))return false;if(F.rate==='hi'&&a<=300)return false;}}
-    else if(F.rate){const h=hourly(p);if(F.rate==='none'){if(h!=null)return false;}else{if(h==null)return false;if(F.rate==='lo'&&h>=30)return false;if(F.rate==='mid'&&(h<30||h>=80))return false;if(F.rate==='hi'&&h<80)return false;}}
+    if(F.rlo>0||F.rhi<1000){const v=sval(p);const R=rangeVals();if(v==null){if(!F.rnone)return false;}else if(v<R.lo||v>R.hi)return false;}
     return true;});
   const byName=(x,y)=>x.name.localeCompare(y.name,'ko');
-  const sv=p=>F.tab==='special'?feeAmt(p):hourly(p);
+  const sv=sval;
   const sorters={
     grade:(x,y)=>(GRADE_ORDER[x.grade]-GRADE_ORDER[y.grade])||((y.star?1:0)-(x.star?1:0))||byName(x,y),
     recent:(x,y)=>((latestDep(y)||{k:''}).k.localeCompare((latestDep(x)||{k:''}).k))||byName(x,y),
@@ -1378,7 +1438,7 @@ document.addEventListener('click',async e=>{
       case 'applyProfiles':return applyProfiles();
       case 'closePaste':$('#pasteModal').classList.remove('open');return;
       case 'doPaste':return doPaste();
-      case 'reset':Object.assign(F,{q:'',field:'',grade:'',target:'',tone:'',payment:'',rate:'',status:''});$('#q').value='';return render();
+      case 'reset':Object.assign(F,{q:'',field:'',grade:'',target:'',tone:'',payment:'',rate:'',rlo:0,rhi:1000,rnone:false,status:''});$('#q').value='';return render();
       case 'closeDrawer':return closeDrawer();
       case 'edit':return openForm(curId);
       case 'closeForm':return closeForm();
@@ -1390,7 +1450,7 @@ document.addEventListener('click',async e=>{
     }
   }
   const more=e.target.closest('[data-more]');if(more){expanded[more.dataset.more]=!expanded[more.dataset.more];drawDetail();return;}
-  const tb=e.target.closest('[data-tab]');if(tb){F.tab=tb.dataset.tab;F.rate='';saveView();render();return;}
+  const tb=e.target.closest('[data-tab]');if(tb){F.tab=tb.dataset.tab;F.rate='';F.rlo=0;F.rhi=1000;F.rnone=false;saveView();render();return;}
   const v=e.target.closest('[data-view]');if(v){F.view=v.dataset.view;saveView();render();return;}
   const item=e.target.closest('[data-id]');if(item&&e.target.closest('#list'))openDrawer(item.dataset.id);
 });
