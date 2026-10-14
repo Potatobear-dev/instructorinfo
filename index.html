@@ -258,7 +258,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
     <div class="brand"><b>HRI 강사 DB</b><i>Instructor Index</i><span class="cnt" id="cnt"></span></div>
     <div class="search">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="이름 · 주제 · 고객사 · 경력 · 자격 · 정성평가 전체 검색">
+      <input id="q" type="search" placeholder="이름 · 세부주제/키워드 · 고객사 · 경력 · 자격 · 정성평가 전체 검색">
     </div>
     <div class="acts" style="display:flex;gap:8px">
       <button class="btn red" id="btnAdd">+ 강사 등록</button>
@@ -274,6 +274,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
           <button data-act="exportCsv">CSV 내보내기 (엑셀용)</button>
           <hr>
           <button data-act="paste">시트 붙여넣기로 일괄 등록<small>구글시트·엑셀 범위 복사 → 붙여넣기</small></button>
+          <button data-act="syn">유의어 사전<small>세부 주제 검색 시 함께 찾을 단어 묶음 편집</small></button>
           <button data-act="profImport">프로필 일괄 반영<small>이름 기준 빈칸 보충 · 구분·연락처·강사료·사진 포함</small></button>
         </div>
       </div>
@@ -346,18 +347,18 @@ function fmtTime(iso){if(!iso)return '—';const d=new Date(iso);const p=n=>Stri
 function blank(){
   const n=nowISO();
   return {id:uid(),name:'',title:'강사',org:'',grade:'',status:'활성',
-    kinds:['main'],star:false,birth:'',sheetMemo:'',
+    kinds:['main'],star:false,birth:'',sheetMemo:'',keywords:[],kwAuto:false,
     careers:[],edus:[],certs:[],activities:'',photo:null,
     fields:[],topic:'',targets:[],
     tone:'',method:'',interaction:'',strengths:'',cautions:'',comment:'',
-    fee:{unit:'',amount:'',minTime:'',special:'',billed:''},
+    fee:{unit:'',amount:'',minTime:'',special:'',billed:'',hours:''},
     sourcing:{channel:'',contact:''},payment:'',
     access:{phone:'',car:'',carModel:'',memo:'',cPhone:'',cEmail:''},
     deployments:[],needsReview:false,createdAt:n,updatedAt:n};
 }
 function normalize(p){const b=blank();const o=Object.assign(b,p||{});
   o.fee=Object.assign(blank().fee,o.fee||{});o.sourcing=Object.assign(blank().sourcing,o.sourcing||{});o.access=Object.assign(blank().access,o.access||{});
-  ['careers','edus','certs','fields','targets','deployments'].forEach(k=>{if(!Array.isArray(o[k]))o[k]=[];});
+  ['careers','edus','certs','fields','targets','deployments','keywords'].forEach(k=>{if(!Array.isArray(o[k]))o[k]=[];});
   if(!o.kinds.length)o.kinds=['main'];
   if(!o.id)o.id=uid();return o;}
 function hourly(p){const m=UNIT_MIN[p.fee.unit];const a=parseFloat(p.fee.amount);if(!m||isNaN(a))return null;return a/(m/60);}
@@ -368,6 +369,11 @@ function topDegree(p){const e=(p.edus||[]).filter(x=>x.school||x.degree);if(!e.l
 function eduText(e){return [e.school,e.major,(e.degree&&!String(e.school||'').includes(e.degree))?e.degree:''].filter(Boolean).join(' ');}
 function careerText(c){const t=[c.org,c.role].filter(Boolean).join(' ');const pr=String(c.period||'').trim();if(!pr)return t;return pr.length<=2?`${pr}) ${t}`:`${t} (${pr})`;}
 function maskEmail(s){return String(s||'').split('\n').map(l=>l.replace(/^(\s*[^@\s(]{1,2})[^@\n]*(@.*)?/,(m,a,b)=>a+'***'+(b||''))).join('\n');}
+const UNIT_H={'시간당':1,'60분':1,'90분':1.5,'2시간':2,'반일(4H)':4,'1일(8H)':8};
+function feeAmt(p){const a=parseFloat(p.fee.amount);return isNaN(a)?null:a;}
+function feeHours(p){const h=UNIT_H[p.fee.unit];if(h)return h;const x=parseFloat(p.fee.hours);return isNaN(x)?null:x;}
+function totalLabel(p){const a=feeAmt(p);if(a==null)return null;const h=feeHours(p);return `${a.toLocaleString('ko-KR')}만원 (${h!=null?h+'H':'시간 미입력'})`;}
+function feeShow(p){return F.tab==='special'?totalLabel(p):(fmtRate(hourly(p))||feeLabel(p));}
 function feeLabel(p){const r=fmtRate(hourly(p));if(r)return r;return p.fee.amount?`${p.fee.unit||''} ${p.fee.amount}만원`.trim():null;}
 function maskStr(s){if(!s)return '';let digits=0;const total=(s.match(/\d/g)||[]).length;return s.replace(/\d/g,d=>{digits++;return digits>total-4?d:'*';});}
 
@@ -381,7 +387,7 @@ const CFG_KEY='hri_idb_gh_cfg';
 const CACHE_KEY='hri_idb_cache';
 const PASS_KEY='hri_idb_pass';
 const API='https://api.github.com';
-let DB={version:2,updatedAt:null,crypto:null,instructors:[]};
+let DB={version:2,updatedAt:null,crypto:null,synonyms:null,instructors:[]};
 let CFG=null,SHA=null,KEY=null;
 let SYNC={state:'off',at:null,msg:''};
 let pendingMsgs=[],rev=0,saving=false,saveTimer=null,lastPull=0;
@@ -439,10 +445,11 @@ function ingestRecord(r,encUsable){
   return p;
 }
 function ingest(obj){
-  DB={version:2,updatedAt:obj.updatedAt||null,crypto:obj.crypto||null,instructors:(obj.instructors||[]).map(r=>ingestRecord(r,true))};
+  DB={version:2,updatedAt:obj.updatedAt||null,crypto:obj.crypto||null,synonyms:Array.isArray(obj.synonyms)?obj.synonyms:null,instructors:(obj.instructors||[]).map(r=>ingestRecord(r,true))};
 }
 async function serialize(){
   const out={version:2,updatedAt:DB.updatedAt,crypto:DB.crypto,instructors:[]};
+  if(DB.synonyms)out.synonyms=DB.synonyms;
   for(const p of DB.instructors){
     const r=clone(p);delete r._enc;delete r._encSrc;delete r._locked;delete r.access;
     if(p._locked){if(p._enc)r.accessEnc=p._enc;}
@@ -622,7 +629,7 @@ function exportCsv(){
   const cols=[['구분',p=>p.kinds.map(k=>(KINDS.find(x=>x[0]===k)||[0,k])[1]).join(' · ')],['성함','name'],['호칭','title'],['소속','org'],['등급',p=>p.grade||'미평가'],['상태','status'],
     ['주요분야',p=>p.fields.join(', ')],['세부주제','topic'],['대상층',p=>p.targets.join(', ')],
     ['톤','tone'],['진행방식','method'],['상호작용','interaction'],['강점','strengths'],['유의사항','cautions'],['강사 정성평가','comment'],
-    ['강사료 기준',p=>p.fee.unit],['금액(만원)',p=>p.fee.amount],['시간당(만원)',p=>{const h=hourly(p);return h==null?'':Math.round(h*10)/10;}],['최소시간',p=>p.fee.minTime],['특약·시트원문',p=>p.fee.special],['제안서 청구 강사료',p=>p.fee.billed],['시트 메모',p=>p.sheetMemo],['출생연도',p=>p.birth],
+    ['강사료 기준',p=>p.fee.unit],['금액(만원)',p=>p.fee.amount],['시간당(만원)',p=>{const h=hourly(p);return h==null?'':Math.round(h*10)/10;}],['최소시간',p=>p.fee.minTime],['강의시간(H)',p=>{const h=feeHours(p);return h==null?'':h;}],['특약·시트원문',p=>p.fee.special],['세부 키워드',p=>p.keywords.join(', ')],['제안서 청구 강사료',p=>p.fee.billed],['시트 메모',p=>p.sheetMemo],['출생연도',p=>p.birth],
     ['섭외경로',p=>p.sourcing.channel],['섭외창구',p=>p.sourcing.contact],['지급방식','payment'],
     ['경력',p=>p.careers.map(careerText).join(' | ')],['학력',p=>p.edus.map(eduText).join(' | ')],['자격',p=>p.certs.map(c=>[c.name,c.issuer,c.year].filter(Boolean).join(' ')).join(' | ')],['주요 활동·저서','activities'],
     ['투입이력',p=>p.deployments.map(d=>[d.client,d.course,d.target,d.date].filter(Boolean).join(' ')).join(' | ')],
@@ -690,35 +697,60 @@ function renderFilters(){
     s('target','대상층 전체',pair(OPT.targets))+
     s('tone','톤 전체',pair(OPT.tone))+
     s('payment','지급방식 전체',pair(OPT.payment))+
-    s('rate','시간당 단가 전체',[['lo','~30만원'],['mid','30~80만원'],['hi','80만원~'],['none','미입력']])+
+    (F.tab==='special'?s('rate','회당 강사료 전체',[['lo','~100만원'],['mid','100~300만원'],['hi','300만원~'],['none','미입력']]):s('rate','시간당 단가 전체',[['lo','~30만원'],['mid','30~80만원'],['hi','80만원~'],['none','미입력']]))+
     s('status','상태 전체',pair(OPT.status))+
     `<button class="btn sm line" data-act="reset">초기화</button><span class="sp"></span>`+
     `<select class="sel" data-f="sort"><option value="grade" ${F.sort==='grade'?'selected':''}>등급순</option><option value="recent" ${F.sort==='recent'?'selected':''}>최근 투입순</option><option value="rateAsc" ${F.sort==='rateAsc'?'selected':''}>단가 낮은순</option><option value="rateDesc" ${F.sort==='rateDesc'?'selected':''}>단가 높은순</option><option value="name" ${F.sort==='name'?'selected':''}>이름순</option><option value="updated" ${F.sort==='updated'?'selected':''}>최근 수정순</option></select>`+
     `<div class="seg"><button data-view="card" class="${F.view==='card'?'on':''}">카드</button><button data-view="table" class="${F.view==='table'?'on':''}">표</button></div>`;
 }
-function hay(p){return [p.name,p.title,p.org,p.topic,p.comment,p.strengths,p.cautions,p.tone,p.method,p.payment,p.sourcing.contact,p.fee.special,p.fee.billed,p.sheetMemo,
+function hay(p){return [p.keywords.join(' '),p.name,p.title,p.org,p.topic,p.comment,p.strengths,p.cautions,p.tone,p.method,p.payment,p.sourcing.contact,p.fee.special,p.fee.billed,p.sheetMemo,
   p.fields.join(' '),p.targets.join(' '),
   p.careers.map(c=>c.org+' '+c.role).join(' '),p.activities,p.certs.map(c=>c.name+' '+c.issuer).join(' '),p.edus.map(e=>e.school+' '+e.major+' '+e.degree).join(' '),
   p.deployments.map(d=>d.client+' '+d.course+' '+d.target+' '+d.reaction).join(' ')].join(' ').toLowerCase();}
+const DEFAULT_SYN=[
+'퍼스널컬러, 컬러진단, 이미지메이킹, 스타일링, 이미지컨설팅','리더십, 팀장, 관리자, 중간관리자, 임원','소통, 커뮤니케이션, 대화법, 스피치, 화법','갈등관리, 갈등, 협상, 설득',
+'프레젠테이션, 프리젠테이션, 발표, PT','보고서, 문서작성, 기획서, 보고스킬','AI, 인공지능, 챗GPT, chatgpt, 생성형, 노코드','디지털전환, DX, 디지털, 데이터',
+'재무, 재무설계, 자산관리, 재테크, 머니','은퇴, 노후, 퇴직준비, 재취업, 미래설계, 생애설계','세무, 절세, 상속, 증여, 세금','코칭, 멘토링','조직문화, 조직활성화, 팀빌딩',
+'퍼실리테이션, 워크숍, 촉진','성과관리, mbo, okr, 목표관리','인문학, 인문, 고전, 철학','심리, 심리학, 정서, 마음, 멘탈, 힐링','스트레스, 번아웃, 회복탄력성, 감정관리',
+'cs, 고객서비스, 고객응대, 서비스','마케팅, 브랜딩, 브랜드','esg, 기후, 탄소, 지속가능','세대, mz, 세대공감, 밀레니얼, 꼰대','창의, 아이디어, 디자인씽킹, 혁신',
+'영어, 비즈니스영어, 글로벌','노무, 노사, 근로','시간관리, 업무관리, 자기관리, 셀프리더십','건강, 웰니스, 운동, 요가','경제, 경제전망, 거시경제, 트렌드','역사, 한국사, 세계사',
+'스토리텔링, 글쓰기, 작문','성희롱, 직장내괴롭힘, 인권, 법정의무','안전, 산업안전, 중대재해'];
+function synGroups(){return (DB.synonyms||DEFAULT_SYN).map(l=>String(l).split(/[,，]/).map(x=>x.trim().toLowerCase()).filter(Boolean)).filter(g=>g.length>1);}
+function expandTerm(t){
+  const out=new Set([t]);
+  synGroups().forEach(g=>{if(g.some(m=>m===t||(t.length>=2&&m.length>=2&&m.includes(t))||(m.length>=3&&t.includes(m))))g.forEach(m=>out.add(m));});
+  return Array.from(out);
+}
+function openSyn(){
+  $('#pasteBox').innerHTML=`<div class="m-head"><h2>유의어 사전</h2><i>Synonyms</i><button class="x" data-act="closePaste">×</button></div>
+  <div class="m-body"><div class="fs" style="border:0"><p style="font-size:14px;line-height:1.65;margin:0 0 8px">한 줄이 하나의 묶음입니다. 같은 줄의 단어는 서로 같은 뜻으로 보고 검색합니다. (예: <b>퍼스널컬러, 컬러진단, 이미지메이킹</b> → 셋 중 무엇을 입력해도 모두 찾아줍니다)</p>
+  <textarea id="synTa" class="inp" style="min-height:340px;font-size:13.5px;line-height:1.6">${esc((DB.synonyms||DEFAULT_SYN).join('\n'))}</textarea></div></div>
+  <div class="m-foot"><button class="btn line" data-act="synReset">기본값으로 되돌리기</button><button class="btn line" data-act="closePaste">취소</button><button class="btn red" data-act="synSave">저장</button></div>`;
+  $('#pasteModal').classList.add('open');
+}
+function saveSyn(){DB.synonyms=$('#synTa').value.split('\n').map(x=>x.trim()).filter(x=>x.includes(','));persist('유의어 사전 수정');$('#pasteModal').classList.remove('open');renderList();toast('유의어 사전을 저장했습니다');}
 function filtered(){
   const q=F.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const qa=q.map(expandTerm);
   let a=DB.instructors.filter(p=>{
     if(!p.kinds.includes(F.tab))return false;
-    if(q.length){const h=hay(p);if(!q.every(t=>h.includes(t)))return false;}
+    if(q.length){const h=hay(p);if(!q.every((t,i)=>qa[i].some(x=>h.includes(x))))return false;}
     if(F.field&&!p.fields.includes(F.field))return false;
     if(F.grade){if(F.grade==='N'?p.grade:p.grade!==F.grade)return false;}
     if(F.target&&!p.targets.includes(F.target))return false;
     if(F.tone&&p.tone!==F.tone)return false;
     if(F.payment&&p.payment!==F.payment)return false;
     if(F.status&&p.status!==F.status)return false;
-    if(F.rate){const h=hourly(p);if(F.rate==='none'){if(h!=null)return false;}else{if(h==null)return false;if(F.rate==='lo'&&h>=30)return false;if(F.rate==='mid'&&(h<30||h>=80))return false;if(F.rate==='hi'&&h<80)return false;}}
+    if(F.rate&&F.tab==='special'){const a=feeAmt(p);if(F.rate==='none'){if(a!=null)return false;}else{if(a==null)return false;if(F.rate==='lo'&&a>100)return false;if(F.rate==='mid'&&(a<=100||a>300))return false;if(F.rate==='hi'&&a<=300)return false;}}
+    else if(F.rate){const h=hourly(p);if(F.rate==='none'){if(h!=null)return false;}else{if(h==null)return false;if(F.rate==='lo'&&h>=30)return false;if(F.rate==='mid'&&(h<30||h>=80))return false;if(F.rate==='hi'&&h<80)return false;}}
     return true;});
   const byName=(x,y)=>x.name.localeCompare(y.name,'ko');
+  const sv=p=>F.tab==='special'?feeAmt(p):hourly(p);
   const sorters={
     grade:(x,y)=>(GRADE_ORDER[x.grade]-GRADE_ORDER[y.grade])||((y.star?1:0)-(x.star?1:0))||byName(x,y),
     recent:(x,y)=>((latestDep(y)||{k:''}).k.localeCompare((latestDep(x)||{k:''}).k))||byName(x,y),
-    rateAsc:(x,y)=>{const a=hourly(x),b=hourly(y);if(a==null&&b==null)return byName(x,y);if(a==null)return 1;if(b==null)return -1;return a-b;},
-    rateDesc:(x,y)=>{const a=hourly(x),b=hourly(y);if(a==null&&b==null)return byName(x,y);if(a==null)return 1;if(b==null)return -1;return b-a;},
+    rateAsc:(x,y)=>{const a=sv(x),b=sv(y);if(a==null&&b==null)return byName(x,y);if(a==null)return 1;if(b==null)return -1;return a-b;},
+    rateDesc:(x,y)=>{const a=sv(x),b=sv(y);if(a==null&&b==null)return byName(x,y);if(a==null)return 1;if(b==null)return -1;return b-a;},
     name:byName,
     updated:(x,y)=>String(y.updatedAt).localeCompare(String(x.updatedAt))
   };
@@ -736,8 +768,8 @@ function renderList(){
     :`<div class="grid"><div class="empty"><b>등록된 강사가 없습니다</b>「+ 강사 등록」, 「데이터 ▾ → JSON 백업 가져오기」(초기 데이터 파일) 또는 「시트 붙여넣기」로 시작하세요.</div></div>`;return;}
   if(!a.length){L.innerHTML=`<div class="grid"><div class="empty"><b>조건에 맞는 강사가 없습니다</b>필터를 조정하거나 초기화하세요.</div></div>`;return;}
   if(F.view==='table'){
-    L.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>등급</th><th>성함</th><th>소속</th><th>분야</th><th>대상</th><th>톤</th><th>시간당</th><th>지급</th><th>최근 투입</th><th>정성평가</th></tr></thead><tbody>${
-      a.map(p=>{const ld=latestDep(p);const r=feeLabel(p);return `<tr data-id="${p.id}">
+    L.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>등급</th><th>성함</th><th>소속</th><th>분야</th><th>대상</th><th>톤</th><th>${F.tab==='special'?'회당 강사료':'시간당'}</th><th>지급</th><th>최근 투입</th><th>정성평가</th></tr></thead><tbody>${
+      a.map(p=>{const ld=latestDep(p);const r=feeShow(p);return `<tr data-id="${p.id}">
         <td>${gBadge(p.grade,'sm')}</td>
         <td><b>${esc(p.name)}</b> <span class="na">${esc(p.title)}</span>${p.needsReview?' <span class="chip rev">검토 필요</span>':''}</td>
         <td>${esc(p.org)||'<span class="na">—</span>'}</td>
@@ -753,7 +785,7 @@ function renderList(){
   L.innerHTML=`<div class="grid">${a.map(card).join('')}</div>`;hydratePhotos(L);
 }
 function card(p){
-  const r=feeLabel(p);const ld=latestDep(p);const c0=p.careers[0];const td=topDegree(p);
+  const r=feeShow(p);const ld=latestDep(p);const c0=p.careers[0];const td=topDegree(p);
   const prof=[c0?`<div><b>경력</b> ${esc(careerText(c0))}</div>`:'',td?`<div><b>학력</b> ${esc(eduText(td))}</div>`:''].join('');
   return `<article class="card ${p.status==='보류'?'dim':''}" data-id="${p.id}" tabindex="0">
     <div class="c-head">${avatar(p)}<div><div class="c-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="c-org">${esc(p.org)||'&nbsp;'}</div></div>${gBadge(p.grade)}</div>
@@ -799,6 +831,7 @@ function drawDetail(){
     <div class="sec"><div class="eb">Field <em>분야 · 대상</em></div>
       <dl class="kv"><dt>주요분야</dt><dd>${p.fields.length?`<div class="chips">${p.fields.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}</div>`:NA}</dd>
       <dt>세부주제</dt><dd>${esc(p.topic)||NA}</dd>
+      <dt>세부 키워드</dt><dd>${p.keywords.length?`<div class="chips">${p.keywords.map(k=>`<span class="chip">${esc(k)}</span>`).join('')}</div>${p.kwAuto?'<div class="sub" style="margin-top:6px">자동 추출 초안 — 수정·저장하면 검토 완료로 처리됩니다</div>':''}`:NA}</dd>
       <dt>대상층</dt><dd>${p.targets.length?`<div class="chips">${p.targets.map(t=>`<span class="chip t">${esc(t)}</span>`).join('')}</div>`:NA}</dd></dl>
     </div>
     <div class="sec"><div class="eb">Style <em>참관 평가</em></div>
@@ -807,8 +840,8 @@ function drawDetail(){
       ${p.cautions?`<div class="note"><b>유의사항</b>${esc(p.cautions)}</div>`:''}
     </div>
     <div class="sec"><div class="eb">Fee <em>강사료</em></div>
-      <div class="big-rate">${r?esc(r.replace('만원/H',''))+'<small>만원 / 시간</small>':(fl?esc(fl):'<span class="na" style="font-size:16px">단가 미입력</span>')}</div>
-      <dl class="kv" style="margin-top:10px"><dt>기준</dt><dd>${p.fee.unit&&p.fee.amount?esc(p.fee.unit)+' '+esc(p.fee.amount)+'만원':NA}</dd><dt>최소 시간</dt><dd>${esc(p.fee.minTime)||NA}</dd><dt>제안서 청구 강사료</dt><dd>${esc(p.fee.billed)||NA}</dd><dt>특약·시트 원문</dt><dd>${esc(p.fee.special)||NA}</dd></dl>
+      <div class="big-rate">${(F.tab==='special'&&feeAmt(p)!=null)?esc(feeAmt(p).toLocaleString('ko-KR'))+`<small>만원 · ${feeHours(p)!=null?feeHours(p)+'H':'시간 미입력'}</small>`:(r?esc(r.replace('만원/H',''))+'<small>만원 / 시간</small>':(fl?esc(fl):'<span class="na" style="font-size:16px">단가 미입력</span>'))}</div>
+      <dl class="kv" style="margin-top:10px"><dt>기준</dt><dd>${p.fee.unit&&p.fee.amount?esc(p.fee.unit)+' '+esc(p.fee.amount)+'만원'+(feeHours(p)!=null?' · '+feeHours(p)+'H':''):NA}</dd><dt>최소 시간</dt><dd>${esc(p.fee.minTime)||NA}</dd><dt>제안서 청구 강사료</dt><dd>${esc(p.fee.billed)||NA}</dd><dt>특약·시트 원문</dt><dd>${esc(p.fee.special)||NA}</dd></dl>
     </div>
     <div class="sec"><div class="eb">Sourcing <em>섭외 · 정산</em></div>
       <dl class="kv"><dt>섭외경로</dt><dd>${esc(p.sourcing.channel)||NA}</dd><dt>섭외 창구</dt><dd>${esc(p.sourcing.contact)||NA}</dd><dt>지급방식</dt><dd>${esc(p.payment)||NA}</dd></dl>
@@ -910,6 +943,7 @@ function openForm(id){
       <div class="fgrid">
         <div class="f full"><span class="lab">주요분야 (복수 선택)</span>${chips('fields',OPT.fields)}</div>
         <div class="f full"><label>세부주제</label>${inp('topic','예: 금융자산관리 2.5H / 바이브코딩')}</div>
+        <div class="f full"><label>세부 키워드 — 쉼표로 구분 · 검색에서 유의어와 함께 찾습니다 ${draft.kwAuto?'<span class="chip rev">자동 추출 초안</span>':''}</label><input class="inp" data-kw="1" value="${esc(draft.keywords.join(', '))}" placeholder="예: 퍼스널컬러, 이미지메이킹, 스타일링"></div>
         <div class="f full"><span class="lab">주요 대상층 (복수 선택)</span>${chips('targets',OPT.targets)}</div>
       </div>
     </div>
@@ -929,6 +963,7 @@ function openForm(id){
         <div class="f"><label>기준단위</label>${plainSel('fee.unit',OPT.unit)}</div>
         <div class="f"><label>금액 (만원)</label>${inp('fee.amount','예: 25','number')}</div>
         <div class="f"><span class="lab">시간당 환산</span><div class="rate-prev" id="ratePrev" style="padding-top:10px"></div></div>
+        <div class="f"><label>강의 시간 (H) — 회당일 때</label>${inp('fee.hours','예: 1.5','number')}</div>
         <div class="f"><label>최소 시간</label>${inp('fee.minTime','예: 4시간')}</div>
         <div class="f"><label>제안서 청구 강사료</label>${inp('fee.billed','예: 150만원/h (고객 청구 기준)')}</div>
         <div class="f full"><label>특약 조건·시트 원문</label>${inp('fee.special','예: 100명 이상 시 시간당 30만원')}</div>
@@ -978,6 +1013,7 @@ async function saveForm(){
   const empty=o=>Object.values(o).every(v=>!String(v||'').trim());
   ['careers','edus','certs','deployments'].forEach(k=>draft[k]=draft[k].filter(x=>!empty(x)));
   if(!draft.kinds.length)draft.kinds=[F.tab];
+  draft.kwAuto=false;
   draft.name=draft.name.trim();draft.needsReview=false;draft.updatedAt=nowISO();
   const i=DB.instructors.findIndex(p=>p.id===draft.id);
   if(i>=0)DB.instructors[i]=draft;else DB.instructors.push(draft);
@@ -988,6 +1024,7 @@ $('#formBox').addEventListener('input',e=>{
   const t=e.target;if(!draft)return;
   if(t.dataset.path){let v=t.value;setPath(draft,t.dataset.path,v);if(t.dataset.path.startsWith('fee.'))ratePrev();if(t.dataset.path==='comment'){const c=$('#cmtCnt');c.textContent=v.length+' / 300자';c.classList.toggle('over',v.length>300);}}
   if(t.dataset.list){draft[t.dataset.list][+t.dataset.i][t.dataset.k]=t.value;}
+  if(t.dataset.kw){draft.keywords=t.value.split(/[,，、]/).map(x=>x.trim()).filter(Boolean);}
 });
 $('#formBox').addEventListener('change',e=>{
   const t=e.target;if(!draft)return;
@@ -1226,6 +1263,12 @@ function planProfiles(list){
     ['org','topic','birth','payment','title'].forEach(k=>{if(k==='title'&&found)return;if(src[k]&&!String(p[k]||'').trim()){p[k]=src[k];if(k!=='title')ch.push({org:'소속',topic:'세부주제',birth:'출생연도',payment:'지급방식'}[k]+': '+src[k]);}});
     ['fields','targets'].forEach(k=>(src[k]||[]).forEach(v=>{if(!p[k].includes(v)){p[k].push(v);ch.push((k==='fields'?'분야+':'대상+')+' '+v);}}));
     const sf=src.fee||{};
+    if(found&&found.needsReview&&src.fee){   // 지난 반영으로 들어온 미검토 강사료는 새 규칙으로 보정 (직접 저장한 값은 건드리지 않음)
+      const fs0=String(found.fee.special||'');
+      if(found.fee.unit==='회당'&&sf.amount!==undefined&&sf.amount!==''&&(sf.unit!==found.fee.unit||String(sf.amount)!==String(found.fee.amount))){p.fee.unit=sf.unit;p.fee.amount=sf.amount;ch.push(`강사료 보정 → ${sf.unit} ${sf.amount}만원`);}
+      if((!fs0||/^(시트|지방|기본 단가)/.test(fs0))&&(sf.special||'')!==fs0&&(sf.special||sf.amount!==undefined)){p.fee.special=sf.special||'';ch.push('강사료 메모 정리');}
+    }
+    (src.keywords||[]).forEach(k=>{if(!p.keywords.some(x=>nz(x)===nz(k))&&p.keywords.length<12){p.keywords.push(k);if(!ch.includes('세부 키워드'))ch.push('세부 키워드');if(!found||!found.keywords.length)p.kwAuto=true;}});
     if(sf.amount!==undefined&&sf.amount!==''&&!String(p.fee.amount||'').trim()){p.fee.unit=sf.unit||p.fee.unit;p.fee.amount=sf.amount;ch.push(`강사료 ${sf.unit||''} ${sf.amount}만원`);}
     if(sf.billed&&!String(p.fee.billed||'').trim()){p.fee.billed=sf.billed;ch.push('청구 강사료');}
     if(sf.special&&!nz(p.fee.special).includes(nz(sf.special))){p.fee.special=p.fee.special?p.fee.special+' | '+sf.special:sf.special;ch.push('강사료 메모');}
@@ -1329,6 +1372,9 @@ document.addEventListener('click',async e=>{
       case 'exportCsv':return exportCsv();
       case 'paste':return openPaste();
       case 'profImport':return openProfileImport();
+      case 'syn':return openSyn();
+      case 'synSave':return saveSyn();
+      case 'synReset':$('#synTa').value=DEFAULT_SYN.join('\n');return;
       case 'applyProfiles':return applyProfiles();
       case 'closePaste':$('#pasteModal').classList.remove('open');return;
       case 'doPaste':return doPaste();
@@ -1344,7 +1390,7 @@ document.addEventListener('click',async e=>{
     }
   }
   const more=e.target.closest('[data-more]');if(more){expanded[more.dataset.more]=!expanded[more.dataset.more];drawDetail();return;}
-  const tb=e.target.closest('[data-tab]');if(tb){F.tab=tb.dataset.tab;saveView();render();return;}
+  const tb=e.target.closest('[data-tab]');if(tb){F.tab=tb.dataset.tab;F.rate='';saveView();render();return;}
   const v=e.target.closest('[data-view]');if(v){F.view=v.dataset.view;saveView();render();return;}
   const item=e.target.closest('[data-id]');if(item&&e.target.closest('#list'))openDrawer(item.dataset.id);
 });
