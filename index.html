@@ -223,6 +223,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .row .ctl button:hover{color:var(--ink);border-color:var(--ink)}
 .row .inp{height:36px;font-size:13.5px}
 .row.career{grid-template-columns:28px 170px 1fr 1fr auto}
+.row.career1,.row.cert1{grid-template-columns:28px 1fr auto}
 .row.edu{grid-template-columns:28px 130px 1fr 1fr auto}
 .row.cert{grid-template-columns:28px 1fr 1fr 110px auto}
 .row.dep{grid-template-columns:28px 1fr 1fr 120px 110px auto}
@@ -381,14 +382,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 const OPT={
   title:['강사','소장','대표','교수','전문교수','전문위원'],
   grade:['A','B','C'],
-  status:['활성','검토중','보류'],
   fields:['리더십','소통/관계','AI/디지털','재무/금융/세무','미래설계/경력','비즈니스매너/CS','체험형(드라마 등)','정서/웰니스','퍼실리테이션','경제/경영','인문/교양','트렌드/과학','글로벌/어학','노무/법무','ESG/환경','기타'],
   targets:['신입','실무자','중간관리자','현장관리자','임원','퇴직예정자','전직원'],
-  tone:['차분·신뢰형','유쾌·에너지형','전문·강의형','친근·공감형'],
-  method:['강의 중심','참여·실습 중심','혼합'],
-  inter:['상','중','하'],
-  unit:['시간당','60분','90분','2시간','반일(4H)','1일(8H)','회당'],
-  channel:['본인 직접연락','매니저·에이전시','내부추천','기존 풀'],
   payment:['통장입금(사업소득 3.3%)','통장입금(기타소득 8.8%)','통장입금(소득구분 미확인)','세금계산서','미확인'],
   degree:['박사','박사수료','석사','학사','기타']
 };
@@ -409,35 +404,75 @@ function fmtTime(iso){if(!iso)return '—';const d=new Date(iso);const p=n=>Stri
 
 function blank(){
   const n=nowISO();
-  return {id:uid(),name:'',title:'강사',org:'',grade:'',status:'활성',
+  return {id:uid(),name:'',title:'강사',org:'',grade:'',
     kinds:['main'],star:false,birth:'',sheetMemo:'',keywords:[],kwAuto:false,
     careers:[],edus:[],certs:[],activities:'',photo:null,book:null,
     fields:[],topic:'',targets:[],
-    tone:'',method:'',interaction:'',strengths:'',cautions:'',comment:'',
-    fee:{unit:'',amount:'',minTime:'',special:'',billed:'',hours:''},
-    sourcing:{channel:'',contact:''},payment:'',
+    comment:'',remarks:'',
+    fee:{payH:'',payR:'',billH:'',billR:'',special:''},
+    payment:'',
     access:{phone:'',car:'',carModel:'',memo:'',cPhone:'',cEmail:''},
     deployments:[],needsReview:false,createdAt:n,updatedAt:n};
 }
-function normalize(p){const b=blank();const o=Object.assign(b,p||{});
-  o.fee=Object.assign(blank().fee,o.fee||{});o.sourcing=Object.assign(blank().sourcing,o.sourcing||{});o.access=Object.assign(blank().access,o.access||{});
+function legacyFix(o,p){
+  const L=[],sg=p.sourcing||{};
+  if(sg.contact)L.push('[섭외담당] '+sg.contact);
+  if(sg.channel)L.push('[섭외경로] '+sg.channel);
+  const st=[p.tone&&'톤 '+p.tone,p.method&&'진행방식 '+p.method,p.interaction&&'상호작용 '+p.interaction].filter(Boolean);
+  if(st.length)L.push('[참관평가] '+st.join(' · '));
+  if(p.strengths)L.push('[강점] '+p.strengths);
+  if(p.cautions)L.push('[유의사항] '+p.cautions);
+  if(L.length){const cur=String(o.remarks||'').trim();o.remarks=cur?L.join('\n')+'\n'+cur:L.join('\n');}
+  ['sourcing','tone','method','interaction','strengths','cautions','status'].forEach(k=>delete o[k]);
+  o.fee=feeMigrate(p.fee||{},(o.kinds&&o.kinds.length)?o.kinds:['main']);
+}
+function feeMigrate(f,kinds){
+  f=f||{};const o={payH:'',payR:'',billH:'',billR:'',special:String(f.special||'')};
+  if(['payH','payR','billH','billR'].some(k=>k in f)){['payH','payR','billH','billR'].forEach(k=>{o[k]=f[k]==null?'':f[k];});return o;}
+  const N=[],r1=v=>Math.round(v*10)/10,a=parseFloat(f.amount),u=f.unit,mins=UNIT_MIN[u],hh=parseFloat(f.hours);
+  const isM=kinds.includes('main'),isS=kinds.includes('special');
+  if(!isNaN(a)){
+    let okM=!isM,okS=!isS;
+    if(isM){if(mins){o.payH=r1(a/(mins/60));okM=true;}else if(u==='회당'&&hh){o.payH=r1(a/hh);okM=true;}}
+    if(isS){if(u==='회당'||(UNIT_H[u]&&u!=='시간당'&&u!=='60분')){o.payR=a;okS=true;}else if((u==='시간당'||u==='60분')&&hh){o.payR=r1(a*hh);okS=true;}}
+    if(!okM||!okS)N.push(('[기존 단가] '+(u||'')+' '+a+'만원'+(hh?' · '+hh+'H':'')).replace(/\s+/g,' '));
+  }
+  const raw=String(f.billed||'').trim();
+  if(raw){const m=raw.match(/(\d+(?:\.\d+)?)\s*(?:만원|만)?/);
+    if(m&&/(\/\s*(h|H|시간)|시간당|시급)/.test(raw)){o.billH=parseFloat(m[1]);}
+    else if(m&&/^\d+(\.\d+)?\s*(만원|만)?$/.test(raw)){if(isS)o.billR=parseFloat(m[1]);else o.billH=parseFloat(m[1]);}
+    else if(m&&/(회|건)/.test(raw)&&!/시간/.test(raw)){o.billR=parseFloat(m[1]);}
+    else N.push('[기존 청구강사료] '+raw);}
+  if(f.minTime)N.push('[최소시간] '+f.minTime);
+  o.special=[o.special].concat(N).filter(Boolean).join(' | ');
+  return o;
+}
+function srcFix(s){s=Object.assign({},s);
+  s.careers=(s.careers||[]).map(c=>typeof c==='string'?{text:c}:{text:c.text!==undefined?String(c.text):careerText(c)}).filter(c=>c.text.trim());
+  s.certs=(s.certs||[]).map(c=>({name:String(typeof c==='string'?c:(c.name||''))})).filter(c=>c.name.trim());
+  s.fee=feeMigrate(s.fee||{},(s.kinds&&s.kinds.length)?s.kinds:['main']);
+  return s;}
+function normalize(p){const b=blank();p=p||{};const o=Object.assign(b,p);
+  legacyFix(o,p);
+  o.access=Object.assign(blank().access,o.access||{});
   ['careers','edus','certs','fields','targets','deployments','keywords'].forEach(k=>{if(!Array.isArray(o[k]))o[k]=[];});
+  o.careers=o.careers.map(c=>typeof c==='string'?{text:c}:{text:c&&c.text!==undefined?String(c.text):careerText(c||{})}).filter(c=>c.text.trim());
+  o.certs=o.certs.map(c=>({name:String(typeof c==='string'?c:((c&&c.name)||''))})).filter(c=>c.name.trim());
   if(!o.kinds.length)o.kinds=['main'];
   if(!o.id)o.id=uid();return o;}
-function hourly(p){const m=UNIT_MIN[p.fee.unit];const a=parseFloat(p.fee.amount);if(!m||isNaN(a))return null;return a/(m/60);}
+const FEEN=v=>{const x=parseFloat(v);return isNaN(x)?null:x;};
+function hourly(p){return FEEN(p.fee.payH);}
 function fmtRate(h){if(h==null)return null;return (Math.round(h*10)/10).toLocaleString('ko-KR')+'만원/H';}
 function dateKey(s){if(!s)return '';const m=String(s).match(/(\d{2,4})(?:\s*[.\-/년]\s*(\d{1,2}))?/);if(!m)return '';let y=m[1];if(y.length===2)y='20'+y;return y+'.'+(m[2]?m[2].padStart(2,'0'):'00');}
 function latestDep(p){let best=null,bk='';(p.deployments||[]).forEach(d=>{const k=dateKey(d.date);if(!best||k>bk){best=d;bk=k;}});return best?{d:best,k:bk}:null;}
 function topDegree(p){const e=(p.edus||[]).filter(x=>x.school||x.degree);if(!e.length)return null;return e.slice().sort((a,b)=>(DEG_RANK[b.degree]||0)-(DEG_RANK[a.degree]||0))[0];}
 function eduText(e){return [e.school,e.major,(e.degree&&!String(e.school||'').includes(e.degree))?e.degree:''].filter(Boolean).join(' ');}
-function careerText(c){const t=[c.org,c.role].filter(Boolean).join(' ');const pr=String(c.period||'').trim();if(!pr)return t;return pr.length<=2?`${pr}) ${t}`:`${t} (${pr})`;}
+function careerText(c){if(c&&c.text!==undefined)return String(c.text);const t=[c.org,c.role].filter(Boolean).join(' ');const pr=String(c.period||'').trim();if(!pr)return t;return pr.length<=2?`${pr}) ${t}`:`${t} (${pr})`;}
 function maskEmail(s){return String(s||'').split('\n').map(l=>l.replace(/^(\s*[^@\s(]{1,2})[^@\n]*(@.*)?/,(m,a,b)=>a+'***'+(b||''))).join('\n');}
 const UNIT_H={'시간당':1,'60분':1,'90분':1.5,'2시간':2,'반일(4H)':4,'1일(8H)':8};
-function feeAmt(p){const a=parseFloat(p.fee.amount);return isNaN(a)?null:a;}
-function feeHours(p){const h=UNIT_H[p.fee.unit];if(h)return h;const x=parseFloat(p.fee.hours);return isNaN(x)?null:x;}
-function totalLabel(p){const a=feeAmt(p);if(a==null)return null;const h=feeHours(p);return `${a.toLocaleString('ko-KR')}만원 (${h!=null?h+'H':'시간 미입력'})`;}
-function feeShow(p){return F.tab==='special'?totalLabel(p):(fmtRate(hourly(p))||feeLabel(p));}
-function feeLabel(p){const r=fmtRate(hourly(p));if(r)return r;return p.fee.amount?`${p.fee.unit||''} ${p.fee.amount}만원`.trim():null;}
+function feeAmt(p){return F.tab==='special'?FEEN(p.fee.payR):FEEN(p.fee.payH);}
+function feeShow(p){const a=feeAmt(p);if(a==null)return null;return F.tab==='special'?a.toLocaleString('ko-KR')+'만원/회':fmtRate(a);}
+function billShow(p){const v=F.tab==='special'?FEEN(p.fee.billR):FEEN(p.fee.billH);if(v==null)return null;return F.tab==='special'?v.toLocaleString('ko-KR')+'만원/회':fmtRate(v);}
 function maskStr(s){if(!s)return '';let digits=0;const total=(s.match(/\d/g)||[]).length;return s.replace(/\d/g,d=>{digits++;return digits>total-4?d:'*';});}
 
 /* =====================================================================
@@ -689,14 +724,14 @@ function download(name,text,type){const b=new Blob([text],{type});const a=docume
 function stamp(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`;}
 async function exportJson(){try{const o=await serialize();download(`HRI_강사DB_백업_${stamp()}.json`,JSON.stringify(o,null,2),'application/json');}catch(e){toast(e.message);}}
 function exportCsv(){
-  const cols=[['구분',p=>p.kinds.map(k=>(KINDS.find(x=>x[0]===k)||[0,k])[1]).join(' · ')],['성함','name'],['호칭','title'],['소속','org'],['등급',p=>p.grade||'미평가'],['상태','status'],
+  const cols=[['구분',p=>p.kinds.map(k=>(KINDS.find(x=>x[0]===k)||[0,k])[1]).join(' · ')],['성함','name'],['호칭','title'],['소속','org'],['등급',p=>p.grade||'미평가'],
     ['주요분야',p=>p.fields.join(', ')],['세부주제','topic'],['대상층',p=>p.targets.join(', ')],
-    ['톤','tone'],['진행방식','method'],['상호작용','interaction'],['강점','strengths'],['유의사항','cautions'],['강사 정성평가','comment'],
-    ['강사료 기준',p=>p.fee.unit],['금액(만원)',p=>p.fee.amount],['시간당(만원)',p=>{const h=hourly(p);return h==null?'':Math.round(h*10)/10;}],['최소시간',p=>p.fee.minTime],['강의시간(H)',p=>{const h=feeHours(p);return h==null?'':h;}],['특약·시트원문',p=>p.fee.special],['세부 키워드',p=>p.keywords.join(', ')],['제안서 청구 강사료',p=>p.fee.billed],['시트 메모',p=>p.sheetMemo],['출생연도',p=>p.birth],
-    ['섭외경로',p=>p.sourcing.channel],['섭외창구',p=>p.sourcing.contact],['지급방식','payment'],
-    ['경력',p=>p.careers.map(careerText).join(' | ')],['학력',p=>p.edus.map(eduText).join(' | ')],['자격',p=>p.certs.map(c=>[c.name,c.issuer,c.year].filter(Boolean).join(' ')).join(' | ')],['주요 활동·저서','activities'],
+    ['강사 정성평가','comment'],
+    ['지급 시간당(만원)',p=>p.fee.payH],['지급 회차당(만원)',p=>p.fee.payR],['청구 시간당(만원)',p=>p.fee.billH],['청구 회차당(만원)',p=>p.fee.billR],['특약조건',p=>p.fee.special],['세부 키워드',p=>p.keywords.join(', ')],['시트 메모',p=>p.sheetMemo],['출생연도',p=>p.birth],
+    ['지급방식','payment'],
+    ['경력',p=>p.careers.map(careerText).join(' | ')],['학력',p=>p.edus.map(eduText).join(' | ')],['자격',p=>p.certs.map(c=>c.name).join(' | ')],['주요 활동·저서','activities'],
     ['투입이력',p=>p.deployments.map(d=>[d.client,d.course,d.target,d.date].filter(Boolean).join(' ')).join(' | ')],
-    ['연락처',p=>p._locked?'(잠김)':p.access.cPhone],['이메일',p=>p._locked?'(잠김)':p.access.cEmail],['출입 휴대폰',p=>p._locked?'(잠김)':p.access.phone],['차량번호',p=>p._locked?'(잠김)':p.access.car],['차종',p=>p._locked?'(잠김)':p.access.carModel]];
+    ['연락처',p=>p._locked?'(잠김)':p.access.cPhone],['이메일',p=>p._locked?'(잠김)':p.access.cEmail],['비고','remarks'],['출입 휴대폰',p=>p._locked?'(잠김)':p.access.phone],['차량번호',p=>p._locked?'(잠김)':p.access.car],['차종',p=>p._locked?'(잠김)':p.access.carModel]];
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const lines=[cols.map(c=>q(c[0])).join(',')].concat(DB.instructors.map(p=>cols.map(c=>q(typeof c[1]==='function'?c[1](p):p[c[1]])).join(',')));
   download(`HRI_강사DB_${stamp()}.csv`,'﻿'+lines.join('\r\n'),'text/csv;charset=utf-8');
@@ -743,7 +778,7 @@ function renderSync(){
 /* =====================================================================
    목록 · 필터
    ===================================================================== */
-const F={q:'',tab:'main',field:'',grade:'',target:'',tone:'',payment:'',rate:'',rlo:0,rhi:1000,rnone:false,status:'',sort:'grade',view:'card'};
+const F={q:'',tab:'main',field:'',grade:'',target:'',payment:'',rate:'',rlo:0,rhi:1000,rnone:false,sort:'grade',view:'card'};
 try{const v=localStorage.getItem('hri_idb_view');if(v)Object.assign(F,JSON.parse(v),{q:''});}catch(e){}
 function saveView(){try{localStorage.setItem('hri_idb_view',JSON.stringify({sort:F.sort,view:F.view,tab:F.tab}));}catch(e){}}
 
@@ -752,7 +787,7 @@ function renderTabs(){
   el.innerHTML=KINDS.map(k=>`<button class="tab ${F.tab===k[0]?'on':''}" data-tab="${k[0]}">${k[1]}<b>${DB.instructors.filter(p=>p.kinds.includes(k[0])).length}</b></button>`).join('');
 }
 /* ---------- 단가 범위 슬라이더 (일반 탭: 시간당 · 특강 탭: 회당 금액) ---------- */
-function sval(p){return F.tab==='special'?feeAmt(p):hourly(p);}
+function sval(p){return feeAmt(p);}
 function niceVal(v){return v<30?Math.round(v):v<100?Math.round(v/5)*5:v<300?Math.round(v/10)*10:Math.round(v/50)*50;}
 function rangeMax(){
   let m=0;DB.instructors.forEach(p=>{if(p.kinds.includes(F.tab)){const v=sval(p);if(v!=null&&v>m)m=v;}});
@@ -808,17 +843,15 @@ function renderFilters(){
     s('field','분야 전체',pair(OPT.fields))+
     s('grade','등급 전체',[['A','A 재섭외 우선'],['B','B 조건부'],['C','C 비추천'],['N','미평가']])+
     s('target','대상층 전체',pair(OPT.targets))+
-    s('tone','톤 전체',pair(OPT.tone))+
     s('payment','지급방식 전체',pair(OPT.payment))+
     rangeHTML()+
-    s('status','상태 전체',pair(OPT.status))+
     `<button class="btn sm line" data-act="reset">초기화</button><span class="sp"></span>`+
     `<select class="sel" data-f="sort"><option value="grade" ${F.sort==='grade'?'selected':''}>등급순</option><option value="recent" ${F.sort==='recent'?'selected':''}>최근 투입순</option><option value="rateAsc" ${F.sort==='rateAsc'?'selected':''}>단가 낮은순</option><option value="rateDesc" ${F.sort==='rateDesc'?'selected':''}>단가 높은순</option><option value="name" ${F.sort==='name'?'selected':''}>이름순</option><option value="updated" ${F.sort==='updated'?'selected':''}>최근 수정순</option></select>`+
     `<div class="seg"><button data-view="card" class="${F.view==='card'?'on':''}">카드</button><button data-view="table" class="${F.view==='table'?'on':''}">표</button></div>`;
 }
-function hay(p){return [p.keywords.join(' '),p.name,p.title,p.org,p.topic,p.comment,p.strengths,p.cautions,p.tone,p.method,p.payment,p.sourcing.contact,p.fee.special,p.fee.billed,p.sheetMemo,
+function hay(p){return [p.keywords.join(' '),p.name,p.title,p.org,p.topic,p.comment,p.remarks,p.payment,p.fee.special,p.sheetMemo,
   p.fields.join(' '),p.targets.join(' '),
-  p.careers.map(c=>c.org+' '+c.role).join(' '),p.activities,p.certs.map(c=>c.name+' '+c.issuer).join(' '),p.edus.map(e=>e.school+' '+e.major+' '+e.degree).join(' '),
+  p.careers.map(c=>c.text).join(' '),p.activities,p.certs.map(c=>c.name).join(' '),p.edus.map(e=>e.school+' '+e.major+' '+e.degree).join(' '),
   p.deployments.map(d=>d.client+' '+d.course+' '+d.target+' '+d.reaction).join(' ')].join(' ').toLowerCase();}
 const DEFAULT_SYN=[
 '퍼스널컬러, 컬러진단, 이미지메이킹, 스타일링, 이미지컨설팅','리더십, 팀장, 관리자, 중간관리자, 임원','소통, 커뮤니케이션, 대화법, 스피치, 화법','갈등관리, 갈등, 협상, 설득',
@@ -851,9 +884,7 @@ function filtered(){
     if(F.field&&!p.fields.includes(F.field))return false;
     if(F.grade){if(F.grade==='N'?p.grade:p.grade!==F.grade)return false;}
     if(F.target&&!p.targets.includes(F.target))return false;
-    if(F.tone&&p.tone!==F.tone)return false;
     if(F.payment&&p.payment!==F.payment)return false;
-    if(F.status&&p.status!==F.status)return false;
     if(F.rlo>0||F.rhi<1000){const v=sval(p);const R=rangeVals();if(v==null){if(!F.rnone)return false;}else if(v<R.lo||v>R.hi)return false;}
     return true;});
   const byName=(x,y)=>x.name.localeCompare(y.name,'ko');
@@ -880,14 +911,13 @@ function renderList(){
     :`<div class="grid"><div class="empty"><b>등록된 강사가 없습니다</b>「+ 강사 등록」, 「데이터 ▾ → JSON 백업 가져오기」(초기 데이터 파일) 또는 「시트 붙여넣기」로 시작하세요.</div></div>`;return;}
   if(!a.length){L.innerHTML=`<div class="grid"><div class="empty"><b>조건에 맞는 강사가 없습니다</b>필터를 조정하거나 초기화하세요.</div></div>`;return;}
   if(F.view==='table'){
-    L.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>등급</th><th>성함</th><th>소속</th><th>분야</th><th>대상</th><th>톤</th><th>${F.tab==='special'?'회당 강사료':'시간당'}</th><th>지급</th><th>최근 투입</th><th>정성평가</th><th>장바구니</th></tr></thead><tbody>${
+    L.innerHTML=`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>등급</th><th>성함</th><th>소속</th><th>분야</th><th>대상</th><th>${F.tab==='special'?'회당 강사료':'시간당'}</th><th>지급</th><th>최근 투입</th><th>정성평가</th><th>장바구니</th></tr></thead><tbody>${
       a.map(p=>{const ld=latestDep(p);const r=feeShow(p);return `<tr data-id="${p.id}">
         <td>${gBadge(p.grade,'sm')}</td>
         <td><b>${esc(p.name)}</b> <span class="na">${esc(p.title)}</span>${p.needsReview?' <span class="chip rev">검토 필요</span>':''}</td>
         <td>${esc(p.org)||'<span class="na">—</span>'}</td>
         <td>${esc(p.fields.join(', '))||'<span class="na">—</span>'}<div class="sub">${esc(p.topic)}</div></td>
         <td>${esc(p.targets.join(', '))||'<span class="na">—</span>'}</td>
-        <td>${esc(p.tone)||'<span class="na">—</span>'}</td>
         <td style="white-space:nowrap;font-weight:800;color:var(--red-dark)">${r||'<span class="na">—</span>'}</td>
         <td>${esc(p.payment)||'<span class="na">—</span>'}</td>
         <td style="white-space:nowrap">${ld?esc(ld.d.client)+'<div class="sub">'+esc(ld.d.date)+'</div>':'<span class="na">—</span>'}</td>
@@ -899,14 +929,14 @@ function renderList(){
 function card(p){
   const r=feeShow(p);const ld=latestDep(p);const c0=p.careers[0];const td=topDegree(p);
   const prof=[c0?`<div><b>경력</b> ${esc(careerText(c0))}</div>`:'',td?`<div><b>학력</b> ${esc(eduText(td))}</div>`:''].join('');
-  return `<article class="card ${p.status==='보류'?'dim':''}" data-id="${p.id}" tabindex="0">
+  return `<article class="card" data-id="${p.id}" tabindex="0">
     <div class="c-head">${avatar(p)}<div><div class="c-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="c-org">${esc(p.org)||'&nbsp;'}</div></div>${gBadge(p.grade)}</div>
-    <div class="chips">${p.fields.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}${p.targets.map(t=>`<span class="chip t">${esc(t)}</span>`).join('')}${p.status!=='활성'?`<span class="chip st">${esc(p.status)}</span>`:''}${p.star?'<span class="chip star">★ 주요 특강</span>':''}${p.kinds.length>1?`<span class="chip st">${F.tab==='main'?'특강 겸':'일반 겸'}</span>`:''}${p.needsReview?'<span class="chip rev">검토 필요</span>':''}</div>
+    <div class="chips">${p.fields.map(f=>`<span class="chip">${esc(f)}</span>`).join('')}${p.targets.map(t=>`<span class="chip t">${esc(t)}</span>`).join('')}${p.star?'<span class="chip star">★ 주요 특강</span>':''}${p.kinds.length>1?`<span class="chip st">${F.tab==='main'?'특강 겸':'일반 겸'}</span>`:''}${p.needsReview?'<span class="chip rev">검토 필요</span>':''}</div>
     ${p.topic?`<div class="c-prof">${esc(p.topic)}</div>`:''}
-    <div class="c-meta"><span class="${r?'rate':'muted'}">${r||'단가 미입력'}</span><span class="muted">${esc(p.payment||'지급방식 미확인')}</span>${p.fee.billed?`<span class="muted">청구 ${esc(p.fee.billed)}</span>`:''}</div>
+    <div class="c-meta"><span class="${r?'rate':'muted'}">${r||'단가 미입력'}</span><span class="muted">${esc(p.payment||'지급방식 미확인')}</span>${billShow(p)?`<span class="muted">청구 ${esc(billShow(p))}</span>`:''}</div>
     ${prof?`<div class="c-prof">${prof}</div>`:''}
     ${p.comment?`<div class="c-cmt">${esc(p.comment)}</div>`:''}
-    <div class="c-foot"><span>${ld?'최근 투입 · '+esc(ld.d.client)+' '+esc(ld.d.date):'투입이력 없음'}</span><span>${esc(p.tone)}</span>${cartBtn(p)}</div>
+    <div class="c-foot"><span>${ld?'최근 투입 · '+esc(ld.d.client)+' '+esc(ld.d.date):'투입이력 없음'}</span>${cartBtn(p)}</div>
   </article>`;
 }
 function render(){renderTabs();renderFilters();renderList();renderSync();renderCartBar();}
@@ -921,7 +951,7 @@ const NA='<span class="na">미입력</span>';
 function cartBtnLg(p){if(!p.kinds.includes(F.tab))return '';const on=inCart(p.id);return `<button type="button" class="btn sm line cartbtn ${on?'on':''}" data-cart="${p.id}" aria-pressed="${on}">${on?'✓ 담음':'＋ 프로필 담기'}</button>`;}
 function drawDetail(){
   const p=DB.instructors.find(x=>x.id===curId);if(!p)return closeDrawer();
-  const h=hourly(p);const r=fmtRate(h);const fl=feeLabel(p);
+  const r=feeShow(p);
   const plist=(arr,key,fmt,limit)=>{if(!arr.length)return `<div class="na" style="font-size:13.5px">미입력</div>`;
     const show=limit&&!expanded[key]?arr.slice(0,limit):arr;
     return `<ul class="plist">${show.map(fmt).join('')}</ul>${limit&&arr.length>limit?`<button class="more" data-more="${key}">${expanded[key]?'접기':'외 '+(arr.length-limit)+'건 더보기'}</button>`:''}`;};
@@ -929,15 +959,15 @@ function drawDetail(){
   const accVal=v=>v?(showAccess?esc(v):`<span class="mask">${esc(maskStr(v))}</span>`):NA;
   $('#drawer').innerHTML=`
   <div class="d-head">
-    <div class="d-top">${avatar(p,'d')}<div><div class="d-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="d-org">${esc(p.org)||'소속 미입력'} · ${esc(p.status)} · ${esc(p.kinds.map(k=>(KINDS.find(x=>x[0]===k)||[0,k])[1]).join(' · '))}${p.star?' · ★ 주요 특강':''}${p.needsReview?' · <span class="chip rev">검토 필요</span>':''}</div></div>${gBadge(p.grade)}<button class="x" data-act="closeDrawer" aria-label="닫기">×</button></div>
+    <div class="d-top">${avatar(p,'d')}<div><div class="d-name">${esc(p.name)}<small>${esc(p.title)}</small></div><div class="d-org">${esc(p.org)||'소속 미입력'} · ${esc(p.kinds.map(k=>(KINDS.find(x=>x[0]===k)||[0,k])[1]).join(' · '))}${p.star?' · ★ 주요 특강':''}${p.needsReview?' · <span class="chip rev">검토 필요</span>':''}</div></div>${gBadge(p.grade)}<button class="x" data-act="closeDrawer" aria-label="닫기">×</button></div>
     <div class="d-actions"><button class="btn sm ink" data-act="edit">수정</button><button class="btn sm line" data-act="copyProfile">프로필 텍스트 복사</button>${cartBtnLg(p)}<button class="btn sm line" data-act="dup">복제</button><button class="btn sm danger" data-act="del">삭제</button></div>
   </div>
   <div class="d-body">
     <div class="sec"><div class="eb">Evaluation <em>강사 정성평가</em></div>${p.comment?`<div class="note" style="margin-top:0;font-size:14.5px;background:#fff8f2;border-color:rgba(193,70,42,.28)">${esc(p.comment)}</div>`:'<div class="na" style="font-size:13.5px">미입력</div>'}</div>
     <div class="sec"><div class="eb">Profile <em>경력 · 학력 · 자격</em></div>
-      <div class="plabel">주요 경력</div>${plist(p.careers,'careers',c=>`<li>${esc([c.org,c.role].filter(Boolean).join(' '))}${c.period?`<span>${esc(c.period)}</span>`:''}</li>`,3)}
+      <div class="plabel">주요 경력</div>${plist(p.careers,'careers',c=>`<li>${esc(c.text)}</li>`,3)}
       <div class="plabel">학력</div>${plist(p.edus,'edus',e=>`<li>${esc([e.school,e.major].filter(Boolean).join(' '))}${(e.degree&&!String(e.school||'').includes(e.degree))?`<span>${esc(e.degree)}</span>`:''}</li>`,0)}
-      <div class="plabel">자격</div>${plist(p.certs,'certs',c=>`<li>${esc(c.name)}${(c.issuer||c.year)?`<span>${esc([c.issuer,c.year].filter(Boolean).join(' · '))}</span>`:''}</li>`,3)}
+      <div class="plabel">자격</div>${plist(p.certs,'certs',c=>`<li>${esc(c.name)}</li>`,3)}
       ${p.birth?`<div class="plabel">출생연도·연령대</div><div class="note" style="margin-top:0">${esc(p.birth)}</div>`:''}
       <div class="plabel">주요 활동·저서</div>${p.activities?`<div class="note" style="margin-top:0">${esc(p.activities)}</div>`:'<div class="na" style="font-size:13.5px">미입력</div>'}
     </div>
@@ -947,22 +977,16 @@ function drawDetail(){
       <dt>세부 키워드</dt><dd>${p.keywords.length?`<div class="chips">${p.keywords.map(k=>`<span class="chip">${esc(k)}</span>`).join('')}</div>${p.kwAuto?'<div class="sub" style="margin-top:6px">자동 추출 초안 — 수정·저장하면 검토 완료로 처리됩니다</div>':''}`:NA}</dd>
       <dt>대상층</dt><dd>${p.targets.length?`<div class="chips">${p.targets.map(t=>`<span class="chip t">${esc(t)}</span>`).join('')}</div>`:NA}</dd></dl>
     </div>
-    <div class="sec"><div class="eb">Style <em>참관 평가</em></div>
-      <dl class="kv"><dt>톤</dt><dd>${esc(p.tone)||NA}</dd><dt>진행방식</dt><dd>${esc(p.method)||NA}</dd><dt>상호작용</dt><dd>${esc(p.interaction)||NA}</dd></dl>
-      ${p.strengths?`<div class="note"><b>강점</b>${esc(p.strengths)}</div>`:''}
-      ${p.cautions?`<div class="note"><b>유의사항</b>${esc(p.cautions)}</div>`:''}
-    </div>
-    <div class="sec"><div class="eb">Fee <em>강사료</em></div>
-      <div class="big-rate">${(F.tab==='special'&&feeAmt(p)!=null)?esc(feeAmt(p).toLocaleString('ko-KR'))+`<small>만원 · ${feeHours(p)!=null?feeHours(p)+'H':'시간 미입력'}</small>`:(r?esc(r.replace('만원/H',''))+'<small>만원 / 시간</small>':(fl?esc(fl):'<span class="na" style="font-size:16px">단가 미입력</span>'))}</div>
-      <dl class="kv" style="margin-top:10px"><dt>기준</dt><dd>${p.fee.unit&&p.fee.amount?esc(p.fee.unit)+' '+esc(p.fee.amount)+'만원'+(feeHours(p)!=null?' · '+feeHours(p)+'H':''):NA}</dd><dt>최소 시간</dt><dd>${esc(p.fee.minTime)||NA}</dd><dt>제안서 청구 강사료</dt><dd>${esc(p.fee.billed)||NA}</dd><dt>특약·시트 원문</dt><dd>${esc(p.fee.special)||NA}</dd></dl>
-    </div>
-    <div class="sec"><div class="eb">Sourcing <em>섭외 · 정산</em></div>
-      <dl class="kv"><dt>섭외경로</dt><dd>${esc(p.sourcing.channel)||NA}</dd><dt>섭외 창구</dt><dd>${esc(p.sourcing.contact)||NA}</dd><dt>지급방식</dt><dd>${esc(p.payment)||NA}</dd></dl>
+    <div class="sec"><div class="eb">Fee <em>강사료 (만원)</em></div>
+      <dl class="kv"><dt>강사 지급비용</dt><dd>${[p.fee.payH!==''?'시간당 '+esc(p.fee.payH):'',p.fee.payR!==''?'회차당 '+esc(p.fee.payR):''].filter(Boolean).join(' · ')||NA}</dd>
+      <dt>고객사 청구</dt><dd>${[p.fee.billH!==''?'시간당 '+esc(p.fee.billH):'',p.fee.billR!==''?'회차당 '+esc(p.fee.billR):''].filter(Boolean).join(' · ')||NA}</dd>
+      <dt>특약조건</dt><dd>${esc(p.fee.special)||NA}</dd><dt>지급방식</dt><dd>${esc(p.payment)||NA}</dd></dl>
       ${p.sheetMemo?`<div class="note"><b>기존 시트 메모 (원문)</b>${esc(p.sheetMemo)}</div>`:''}
     </div>
     <div class="sec"><div class="eb">Contact <em>연락처 · 이메일 (암호화 저장) ${p._locked?`<button class="eye" data-act="unlock">🔒 잠금 해제</button>`:(acc.cPhone||acc.cEmail)?`<button class="eye" data-act="toggleAccess">${showAccess?'가리기':'보기'}</button>`:''}</em></div>
       ${p._locked?`<div class="na" style="font-size:13.5px">암호화되어 있습니다 — 잠금 해제 후 표시됩니다</div>`:`<dl class="kv"><dt>연락처</dt><dd>${accVal(acc.cPhone)}</dd><dt>이메일</dt><dd>${acc.cEmail?(showAccess?esc(acc.cEmail):`<span class="mask">${esc(maskEmail(acc.cEmail))}</span>`):NA}</dd></dl>`}
     </div>
+    <div class="sec"><div class="eb">Remarks <em>비고 · 섭외 연락담당 · 섭외 시 참고</em></div>${p.remarks?`<div class="note" style="margin-top:0;white-space:pre-wrap">${esc(p.remarks)}</div>`:'<div class="na" style="font-size:13.5px">미입력</div>'}</div>
     <div class="sec"><div class="eb">Access <em>출입등록 ${p._locked?`<button class="eye" data-act="unlock">🔒 잠금 해제</button>`:(acc.phone||acc.car)?`<button class="eye" data-act="toggleAccess">${showAccess?'가리기':'보기'}</button>`:''}</em></div>
       ${p._locked?`<div class="na" style="font-size:13.5px">암호화되어 있습니다 — 잠금 해제 후 표시됩니다</div>`:`<dl class="kv"><dt>휴대폰</dt><dd>${accVal(acc.phone)}</dd><dt>차량번호</dt><dd>${accVal(acc.car)}</dd><dt>차종</dt><dd>${esc(acc.carModel)||NA}</dd><dt>출입 메모</dt><dd>${esc(acc.memo)||NA}</dd></dl>`}
     </div>
@@ -1007,9 +1031,9 @@ function ta(path,ph){return `<textarea class="inp" data-path="${path}" placehold
 function chips(path,opts){const v=getPath(draft,path)||[];return `<div class="chipset">${opts.map(o=>`<button type="button" data-chip="${path}" data-val="${esc(o)}" aria-pressed="${v.includes(o)}">${esc(o)}</button>`).join('')}</div>`;}
 
 const LISTS={
-  careers:{max:10,top:3,cls:'career',blank:()=>({period:'',org:'',role:''}),cells:[['period','기간 (2015.03~현재)'],['org','기관'],['role','직함·역할']],label:'주요 경력',hint:'최대 10개 · 상위 3개가 기본 노출됩니다 (▲▼로 순서 조정)'},
+  careers:{max:10,top:3,cls:'career1',blank:()=>({text:''}),cells:[['text','한 줄로 입력 — 例) 現) 마음을 움직이는 사람들 대표 / 前) SK Telecom Sales Innovation Academy 모듈장']],label:'주요 경력',hint:'최대 10개 · 한 줄에 하나, 맨 앞에 現) 또는 前) 표기 · 상위 3개가 기본 노출됩니다 (▲▼로 순서 조정)'},
   edus:{max:3,top:0,cls:'edu',blank:()=>({degree:'',school:'',major:''}),cells:[['degree','학위',OPT.degree],['school','학교'],['major','전공']],label:'학력',hint:'최대 3개 · 최상위 학위가 카드에 대표로 표시됩니다'},
-  certs:{max:10,top:3,cls:'cert',blank:()=>({name:'',issuer:'',year:''}),cells:[['name','자격명'],['issuer','발급기관'],['year','취득연도']],label:'자격',hint:'최대 10개 · 상위 3개가 기본 노출됩니다'},
+  certs:{max:10,top:3,cls:'cert1',blank:()=>({name:''}),cells:[['name','자격명']],label:'자격',hint:'최대 10개 · 상위 3개가 기본 노출됩니다'},
   deployments:{max:999,top:0,cls:'dep',blank:()=>({client:'',course:'',target:'',date:'',reaction:'',ref:''}),cells:[['client','고객사'],['course','과정명'],['target','대상'],['date','시기 (2026.09)'],['reaction','현장 반응','',' wide'],['ref','레퍼런스 자료 (링크 또는 파일 위치)','',' wide2']],label:'투입이력',hint:'우리 쪽으로 투입된 건만 기록 (강사 본인 커리어는 주요 경력에)'}
 };
 function listHTML(key){
@@ -1024,7 +1048,7 @@ function listHTML(key){
   return `<div class="lst">${rows}<button type="button" class="add" data-add="${key}" ${full?'disabled':''}>${full?`최대 ${L.max}개까지 입력할 수 있습니다`:`+ ${L.label} 추가`}${L.max<999?` (${arr.length}/${L.max})`:''}</button></div>`;
 }
 function rerenderList(key){$(`[data-listwrap="${key}"]`).innerHTML=listHTML(key);}
-function ratePrev(){const r=fmtRate(hourly(draft));const el=$('#ratePrev');if(el)el.textContent=r?'= '+r:'기준·금액 입력 시 자동 환산';}
+function ratePrev(){}
 
 function openForm(id){
   const src=id?DB.instructors.find(p=>p.id===id):null;
@@ -1042,7 +1066,6 @@ function openForm(id){
         <div class="f"><label>호칭</label>${selOrCustom('title',OPT.title)}</div>
         <div class="f"><label>소속</label>${inp('org','예: AI리더십연구소')}</div>
         <div class="f"><label>등급</label><select class="inp" data-path="grade"><option value="">미평가 (소개만 받음)</option>${[['A','A — 재섭외 우선'],['B','B — 주제·대상 맞으면 섭외'],['C','C — 보완 필요 · 비추천']].map(g=>`<option value="${g[0]}" ${draft.grade===g[0]?'selected':''}>${g[1]}</option>`).join('')}</select></div>
-        <div class="f"><label>상태</label>${plainSel('status',OPT.status,'선택')}</div>
         <div class="f"><label>출생연도·연령대</label>${inp('birth','예: 1979년 / 40대')}</div>
         <div class="f full"><label>강사 정성평가 <span class="cnt ${(draft.comment||'').length>300?'over':''}" id="cmtCnt">${(draft.comment||'').length} / 300자</span></label><textarea class="inp" data-path="comment" maxlength="300" style="min-height:96px" placeholder="등급의 근거가 되는 주관적 평가 — 강의력·톤·몰입 유도·운영 협조·아쉬운 점 등 자유롭게">${esc(draft.comment||'')}</textarea></div>
       </div>
@@ -1061,48 +1084,38 @@ function openForm(id){
         <div class="f full"><span class="lab">주요 대상층 (복수 선택)</span>${chips('targets',OPT.targets)}</div>
       </div>
     </div>
-    <div class="fs"><div class="eb">03 Style <em>참관 평가</em></div>
+    <div class="fs"><div class="eb">03 Fee <em>강사료 (만원) — 일반은 시간당, 특강은 회차당 단가만 입력</em></div>
       <div class="fgrid c3">
-        <div class="f"><label>톤</label>${selOrCustom('tone',OPT.tone)}</div>
-        <div class="f"><label>진행방식</label>${plainSel('method',OPT.method)}</div>
-        <div class="f"><label>교육생 상호작용</label>${plainSel('interaction',OPT.inter)}</div>
-      </div>
-      <div class="fgrid" style="margin-top:12px">
-        <div class="f"><label>강점</label>${ta('strengths','예: 단계별 전달 좋음, 돌발상황 대처 우수')}</div>
-        <div class="f"><label>유의사항</label>${ta('cautions','예: 일정 조율 어려움, 요구사항 많음')}</div>
-      </div>
-    </div>
-    <div class="fs"><div class="eb">04 Fee <em>강사료</em></div>
-      <div class="fgrid c3">
-        <div class="f"><label>기준단위</label>${plainSel('fee.unit',OPT.unit)}</div>
-        <div class="f"><label>금액 (만원)</label>${inp('fee.amount','예: 25','number')}</div>
-        <div class="f"><span class="lab">시간당 환산</span><div class="rate-prev" id="ratePrev" style="padding-top:10px"></div></div>
-        <div class="f"><label>강의 시간 (H) — 회당일 때</label>${inp('fee.hours','예: 1.5','number')}</div>
-        <div class="f"><label>최소 시간</label>${inp('fee.minTime','예: 4시간')}</div>
-        <div class="f"><label>제안서 청구 강사료</label>${inp('fee.billed','예: 150만원/h (고객 청구 기준)')}</div>
-        <div class="f full"><label>특약 조건·시트 원문</label>${inp('fee.special','예: 100명 이상 시 시간당 30만원')}</div>
+        <div class="f"><label>강사 지급비용 · 시간당 <span class="sub">(일반)</span></label>${inp('fee.payH','예: 25','number')}</div>
+        <div class="f"><label>강사 지급비용 · 회차당 <span class="sub">(특강)</span></label>${inp('fee.payR','예: 100','number')}</div>
+        <div class="f"></div>
+        <div class="f"><label>고객사 청구 · 시간당 <span class="sub">(일반)</span></label>${inp('fee.billH','예: 40','number')}</div>
+        <div class="f"><label>고객사 청구 · 회차당 <span class="sub">(특강)</span></label>${inp('fee.billR','예: 150','number')}</div>
+        <div class="f full"><label>특약조건</label>${inp('fee.special','예: 100명 이상 시 시간당 30만원 / 기존 단가 원문')}</div>
       </div>
     </div>
-    <div class="fs"><div class="eb">05 Sourcing <em>섭외 · 정산</em></div>
+    <div class="fs"><div class="eb">04 Settlement <em>정산</em></div>
       <div class="fgrid c3">
-        <div class="f"><label>섭외경로</label>${selOrCustom('sourcing.channel',OPT.channel)}</div>
-        <div class="f"><label>섭외 담당·창구</label>${inp('sourcing.contact','예: 김준호 매니저(개인연락)')}</div>
         <div class="f"><label>지급방식</label>${selOrCustom('payment',OPT.payment)}</div>
         <div class="f full"><label>기존 시트 메모 (원문 보존)</label>${ta('sheetMemo','엑셀·구글시트에 적어두던 특이사항 원문')}</div>
       </div>
     </div>
-    <div class="fs"><div class="eb">06 Contact · Access <em>연락처·출입등록 — GitHub에는 암호화되어 저장, 화면에서는 기본 마스킹</em></div>
-      ${(draft._locked||!accessEditable())?`<div class="lock">🔒 출입정보가 잠겨 있습니다. 상단 「출입정보 잠김 · 해제」에서 암호 문구를 입력해야 편집할 수 있습니다. (기존 값은 그대로 보존됩니다)</div>`:''}
+    <div class="fs"><div class="eb">05 Contact <em>연락처 · 이메일 · 비고 — 연락처·이메일은 GitHub에 암호화되어 저장, 화면에서는 기본 마스킹</em></div>
+      ${(draft._locked||!accessEditable())?`<div class="lock">🔒 암호화 영역이 잠겨 있습니다. 상단 「출입정보 잠김 · 해제」에서 암호 문구를 입력해야 연락처·이메일·출입정보를 편집할 수 있습니다. (기존 값은 그대로 보존됩니다)</div>`:''}
       <fieldset ${(draft._locked||!accessEditable())?'disabled':''} style="border:0;padding:0;margin:0;min-width:0"><div class="fgrid c3">
-        <div class="f"><label>연락처 (섭외용)</label>${inp('access.cPhone','010-0000-0000 (담당자명)')}</div>
+        <div class="f"><label>연락처</label>${inp('access.cPhone','010-0000-0000')}</div>
         <div class="f" style="grid-column:span 2"><label>이메일</label>${inp('access.cEmail','name@example.com')}</div>
+      </div></fieldset>
+      <div class="fgrid" style="margin-top:12px"><div class="f full"><label>비고 — 섭외 연락담당 · 강의 섭외 시 참고사항</label>${ta('remarks','예: [섭외담당] 김준호 매니저(개인연락)\n주중 오전 연락 선호 / 주제는 사전 협의 필요')}</div></div>
+      <div class="plabel" style="margin-top:16px">출입등록 (사옥·연수원 출입용, 선택)</div>
+      <fieldset ${(draft._locked||!accessEditable())?'disabled':''} style="border:0;padding:0;margin:0;min-width:0"><div class="fgrid c3">
         <div class="f"><label>출입등록 휴대폰</label>${inp('access.phone','010-0000-0000','tel')}</div>
         <div class="f"><label>차량번호</label>${inp('access.car','12가 3456')}</div>
         <div class="f"><label>차종</label>${inp('access.carModel','예: 그랜저 흰색')}</div>
         <div class="f full"><label>출입 메모</label>${inp('access.memo','예: 신분증 지참 필요 연수원')}</div>
       </div></fieldset>
     </div>
-    <div class="fs"><div class="eb">07 Deployments <em>투입이력</em></div>
+    <div class="fs"><div class="eb">06 Deployments <em>투입이력</em></div>
       <div class="lock">${LISTS.deployments.hint}</div>
       <div data-listwrap="deployments">${listHTML('deployments')}</div>
     </div>
@@ -1370,10 +1383,10 @@ function parseRow(r){
   if(/\(퇴직예정\)/.test(fld)){p.targets.push('퇴직예정자');fld=fld.replace(/\(퇴직예정\)\s*/,'');}
   p.topic=fld;p.fields=guessFields(fld);
   const fee=(r['금액']||'').trim();const fm=fee.match(/(\d+)\s*분\s*(\d+(?:\.\d+)?)(?:\s*\/\s*(.+))?/);
-  if(fm){const u={'60':'60분','90':'90분','120':'2시간'}[fm[1]];if(u){p.fee.unit=u;p.fee.amount=fm[2];}if(fm[3])p.fee.minTime=fm[3].trim();}
+  if(fm){const mm=+fm[1];if([60,90,120].includes(mm))p.fee.payH=Math.round(parseFloat(fm[2])/(mm/60)*10)/10;if(fm[3])p.fee.special='[최소시간] '+fm[3].trim();}
   else if(fee)p.fee.special=fee;
   const sc=(r['섭외방법']||'').trim();
-  if(sc){if(/본인/.test(sc))p.sourcing.channel='본인 직접연락';else if(/매니저|에이전시/.test(sc)){p.sourcing.channel='매니저·에이전시';p.sourcing.contact=sc;}else p.sourcing.contact=sc;}
+  if(sc)p.remarks='[섭외] '+sc;
   p.comment=(r['비고']||'').trim();
   const pay=(r['처리']||'').trim();
   if(/세금계산서/.test(pay))p.payment='세금계산서';else if(/기타소득/.test(pay))p.payment='통장입금(기타소득 8.8%)';else if(/사업소득|통장/.test(pay))p.payment='통장입금(사업소득 3.3%)';else if(pay)p.payment=pay;
@@ -1409,27 +1422,22 @@ const nz=s=>String(s||'').replace(/[\s·.,()\/\-]/g,'').toLowerCase();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function planProfiles(list){
   const items=[];
-  list.forEach(src=>{
-    const name=String(src.name||'').trim();if(!name)return;
+  list.forEach(src0=>{
+    const src=srcFix(src0);const name=String(src.name||'').trim();if(!name)return;
     const found=DB.instructors.find(x=>nz(x.name)===nz(name));
     if(src.bookOnly&&!DB.instructors.find(x=>nz(x.name)===nz(name)))return;
     const p=found?clone(found):blank();const ch=[];let photo=null,book=null;
-    if(!found){p.name=name;p.status='검토중';p.needsReview=true;p.kinds=[];if(src.title)p.title=src.title;ch.push('신규 등록 (미평가 · 검토중)');}
+    if(!found){p.name=name;p.needsReview=true;p.kinds=[];if(src.title)p.title=src.title;ch.push('신규 등록 (미평가 · 검토 필요)');}
     (src.kinds||[]).forEach(k=>{if(!p.kinds.includes(k)){p.kinds.push(k);if(found)ch.push('구분+ '+(KINDS.find(x=>x[0]===k)||[0,k])[1]);}});
     if(!p.kinds.length)p.kinds=['main'];
     if(src.star&&!p.star){p.star=true;ch.push('★ 주요 특강');}
     ['org','topic','birth','payment','title'].forEach(k=>{if(k==='title'&&found)return;if(src[k]&&!String(p[k]||'').trim()){p[k]=src[k];if(k!=='title')ch.push({org:'소속',topic:'세부주제',birth:'출생연도',payment:'지급방식'}[k]+': '+src[k]);}});
     ['fields','targets'].forEach(k=>(src[k]||[]).forEach(v=>{if(!p[k].includes(v)){p[k].push(v);ch.push((k==='fields'?'분야+':'대상+')+' '+v);}}));
     const sf=src.fee||{};
-    if(found&&found.needsReview&&src.fee){   // 지난 반영으로 들어온 미검토 강사료는 새 규칙으로 보정 (직접 저장한 값은 건드리지 않음)
-      const fs0=String(found.fee.special||'');
-      if(found.fee.unit==='회당'&&sf.amount!==undefined&&sf.amount!==''&&(sf.unit!==found.fee.unit||String(sf.amount)!==String(found.fee.amount))){p.fee.unit=sf.unit;p.fee.amount=sf.amount;ch.push(`강사료 보정 → ${sf.unit} ${sf.amount}만원`);}
-      if((!fs0||/^(시트|지방|기본 단가)/.test(fs0))&&(sf.special||'')!==fs0&&(sf.special||sf.amount!==undefined)){p.fee.special=sf.special||'';ch.push('강사료 메모 정리');}
-    }
     (src.keywords||[]).forEach(k=>{if(!p.keywords.some(x=>nz(x)===nz(k))&&p.keywords.length<12){p.keywords.push(k);if(!ch.includes('세부 키워드'))ch.push('세부 키워드');if(!found||!found.keywords.length)p.kwAuto=true;}});
-    if(sf.amount!==undefined&&sf.amount!==''&&!String(p.fee.amount||'').trim()){p.fee.unit=sf.unit||p.fee.unit;p.fee.amount=sf.amount;ch.push(`강사료 ${sf.unit||''} ${sf.amount}만원`);}
-    if(sf.billed&&!String(p.fee.billed||'').trim()){p.fee.billed=sf.billed;ch.push('청구 강사료');}
+    ['payH','payR','billH','billR'].forEach(k=>{if(sf[k]!==''&&sf[k]!=null&&String(p.fee[k]===undefined?'':p.fee[k]).trim()===''){p.fee[k]=sf[k];ch.push({payH:'지급 시간당',payR:'지급 회차당',billH:'청구 시간당',billR:'청구 회차당'}[k]+' '+sf[k]+'만원');}});
     if(sf.special&&!nz(p.fee.special).includes(nz(sf.special))){p.fee.special=p.fee.special?p.fee.special+' | '+sf.special:sf.special;ch.push('강사료 메모');}
+    if(src.remarks&&!nz(p.remarks).includes(nz(src.remarks))){p.remarks=p.remarks?p.remarks+'\n'+src.remarks:src.remarks;ch.push('비고');}
     if(src.sheetMemo&&!nz(p.sheetMemo).includes(nz(src.sheetMemo))){p.sheetMemo=p.sheetMemo?p.sheetMemo+'\n'+src.sheetMemo:src.sheetMemo;ch.push('시트 메모');}
     const sc=src.contact||{};
     if(sc.phone&&!String(p.access.cPhone||'').trim()){p.access.cPhone=sc.phone;ch.push('연락처');}
@@ -1437,7 +1445,7 @@ function planProfiles(list){
     if(src.photoData&&!p.photo){photo=src.photoData;ch.push('사진');}
     if(src.bookData&&!p.book){book=src.bookData;ch.push('저서 표지 이미지');}
     const addList=(k,keyf,label)=>{let n=0,over=0;(src[k]||[]).forEach(it=>{const item=Object.assign(LISTS[k].blank(),it);if(p[k].some(x=>keyf(x)===keyf(item)))return;if(p[k].length>=MAX[k]){over++;return;}p[k].push(item);n++;});if(n)ch.push(`${label} +${n}`);if(over)ch.push(`${label} ${over}건은 최대 ${MAX[k]}개 초과로 제외`);};
-    addList('careers',c=>nz(c.org)+'|'+nz(c.role),'경력');
+    addList('careers',c=>nz(c.text),'경력');
     addList('edus',e=>nz(e.school)+'|'+nz(e.degree),'학력');
     addList('certs',c=>nz(c.name),'자격');
     if(src.activitiesOld!==undefined){if(found&&src.activities&&String(found.activities||'').trim()===String(src.activitiesOld||'').trim()){p.activities=src.activities;ch.push('주요 활동 정리 (프로젝트 분리)');}}
@@ -1615,8 +1623,8 @@ function parseActs(p){
   });
   return o;
 }
-const isPast=c=>/^[前전]/.test(String(c.period||'').trim());
-function careerTxt(c){const t=[c.org,c.role].filter(Boolean).join(' ');const pr=String(c.period||'').trim();if(!pr)return t;return pr.length<=2?`${pr}) ${t}`:`${t} (${pr})`;}
+const isPast=c=>/^[前전]/.test(c&&c.text!==undefined?String(c.text).trim():String(c&&c.period||'').trim());
+function careerTxt(c){if(c&&c.text!==undefined)return String(c.text).trim();const t=[c.org,c.role].filter(Boolean).join(' ');const pr=String(c.period||'').trim();if(!pr)return t;return pr.length<=2?`${pr}) ${t}`:`${t} (${pr})`;}
 function eduTxt(e){return [e.school,e.major,(e.degree&&!String(e.school||'').includes(e.degree))?e.degree:''].filter(Boolean).join(' ');}
 function birthTxt(b){b=String(b||'').trim();if(!b)return '';const m=b.match(/(\d{4})/);return m?m[1]+'년생':b;}
 function generalData(p){
@@ -1639,8 +1647,7 @@ function specialData(p){
   const dd=arr=>{const seen=new Set();return arr.filter(x=>{const k=nz0(x);if(seen.has(k))return false;seen.add(k);return true;});};
   const works=dd(a.books.concat(a.acts));
   const topic=String(p.topic||'').trim();
-  let fee=String(p.fee&&p.fee.billed||'').trim();
-  if(fee&&/^\d+(\.\d+)?\s*(만원)?$/.test(fee)){fee=fee.replace(/만원$/,'')+'만원';if(p.fee.hours)fee+=` / ${p.fee.hours}H`;}
+  let fee='';{const v=parseFloat(p.fee&&p.fee.billR);if(!isNaN(v))fee=v.toLocaleString('ko-KR')+'만원 / 회';}
   return {name:p.name,nameLine:p.name+title+(p.org?` (${p.org})`:''),nameOnly:p.name+title,org:p.org||'',topic:topic||'특강주제 확인필요',topicMissing:!topic,
     hist:dd(edu.slice(0,2).concat(car)),works,fee:fee?`+ 청구 강사료: ${fee}`:'+ 청구 강사료: 시간당 협의',
     fields:(p.keywords&&p.keywords.length?p.keywords:(p.fields||[])).slice(0,8),field0:(p.fields&&p.fields[0])||''};
@@ -1885,7 +1892,7 @@ function profData(p){
   let courses=dd(String(p.topic||'').split(/\s+\/\s+|\n|\s·\s/).map(s=>s.trim()).filter(Boolean));
   if(!courses.length)courses=dd((p.fields||[]).slice());
   seen.clear();
-  const certs=(p.certs||[]).filter(c=>c&&c.name).map(c=>({name:String(c.name).trim(),issuer:String(c.issuer||'').trim()}));
+  const certs=(p.certs||[]).filter(c=>c&&c.name).map(c=>({name:String(c.name).trim()}));
   seen.clear();
   let works=dd(a.books.concat(a.acts));
   if(!works.length){seen.clear();works=dd(a.projects.slice());}
@@ -1975,7 +1982,7 @@ function buildProfile1(p,img){
   const rows=[
     {idx:16,nm:'주요 경력',items:car,w:10.32,key:'careers'},
     {idx:17,nm:'주요 출강분야',items:d.courses,w:8.07,key:'courses'},
-    {idx:18,nm:'주요 자격',items:d.certs.slice(0,3).map(c=>c.issuer&&(c.name+c.issuer).length<=26?`${c.name} (${c.issuer})`:c.name),w:10.32,key:'certs'},
+    {idx:18,nm:'주요 자격',items:d.certs.slice(0,3).map(c=>c.name),w:10.32,key:'certs'},
     {idx:19,nm:'저서/활동',items:d.works,w:8.07,key:'works'}];
   if(d.certs.length>3)notes.push(`자격 ${d.certs.length}건 중 3건만 표기`);
   rows.forEach(r=>{
@@ -2075,7 +2082,7 @@ function cartFlags(p,kind){
   const f=[];
   if(!p.photo)f.push('사진 없음');
   if(kind==='main'){const d=profData(p);if(!d.careers.length&&!d.edu.length)f.push('경력 비어 있음');if(!d.clients.length)f.push('출강 업체 없음');if(!d.courses.length)f.push('출강분야 없음');}
-  else{const d=specialData(p);if(d.topicMissing)f.push('특강주제 확인필요');if(!p.fee.billed)f.push('청구 강사료 없음 → 「시간당 협의」');if(!d.hist.length&&!d.works.length)f.push('약력·저서 비어 있음');}
+  else{const d=specialData(p);if(d.topicMissing)f.push('특강주제 확인필요');if(!p.fee.billR&&p.fee.billR!==0)f.push('청구 강사료 없음 → 「시간당 협의」');if(!d.hist.length&&!d.works.length)f.push('약력·저서 비어 있음');}
   return f;
 }
 const SP_LAYOUTS=[['1x1','1×1','1명/장'],['1x2','1×2','2명/장'],['1x3','1×3','3명/장'],['1x4','1×4','4명/장'],['3x2','3×2','6명/장'],['4x2','4×2','8명/장']];
@@ -2226,7 +2233,7 @@ document.addEventListener('click',async e=>{
       case 'applyProfiles':return applyProfiles();
       case 'closePaste':$('#pasteModal').classList.remove('open');return;
       case 'doPaste':return doPaste();
-      case 'reset':Object.assign(F,{q:'',field:'',grade:'',target:'',tone:'',payment:'',rate:'',rlo:0,rhi:1000,rnone:false,status:''});$('#q').value='';return render();
+      case 'reset':Object.assign(F,{q:'',field:'',grade:'',target:'',payment:'',rate:'',rlo:0,rhi:1000,rnone:false});$('#q').value='';return render();
       case 'closeDrawer':return closeDrawer();
       case 'edit':return openForm(curId);
       case 'closeForm':return closeForm();
